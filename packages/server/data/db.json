@@ -1,0 +1,25 @@
+{
+  "crawlingTasks": [
+    {
+      "id": "task_1751530776224",
+      "url": "https://www.douyin.com/video/7521697944496590114",
+      "status": "completed",
+      "progress": 100,
+      "message": "爬取完成",
+      "startTime": "2025-07-03T08:19:36.248Z",
+      "endTime": "2025-07-03T08:19:39.314Z",
+      "videoId": "20250703_u93py08x"
+    },
+    {
+      "id": "task_1751533403836",
+      "url": "https://www.douyin.com/video/7521261448710950144",
+      "status": "completed",
+      "progress": 100,
+      "message": "爬取完成",
+      "startTime": "2025-07-03T09:03:23.914Z",
+      "endTime": "2025-07-03T09:03:43.397Z",
+      "videoId": "20250703_6ha9umxj"
+    }
+  ],
+  "videos": []
+}

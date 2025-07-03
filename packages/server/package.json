@@ -1,0 +1,36 @@
+{
+  "name": "@douyin2youtube/server",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm exec tsup",
+    "dev": "pnpm exec tsup --watch --onSuccess 'node dist/index.js'",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@koa/cors": "^4.0.0",
+    "axios": "^1.6.0",
+    "better-sqlite3": "^12.2.0",
+    "bullmq": "^4.0.0",
+    "dotenv": "^16.3.0",
+    "fs-extra": "^11.1.1",
+    "knex": "^3.0.1",
+    "koa": "^2.14.0",
+    "koa-bodyparser": "^4.4.0",
+    "koa-router": "^12.0.0",
+    "lowdb": "1.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.14.0",
+    "@types/fs-extra": "^11.0.1",
+    "@types/koa": "^2.13.0",
+    "@types/koa-bodyparser": "^4.3.0",
+    "@types/koa-router": "^7.4.0",
+    "@types/koa__cors": "^4.0.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

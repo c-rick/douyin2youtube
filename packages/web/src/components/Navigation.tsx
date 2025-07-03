@@ -1,0 +1,74 @@
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Download, Edit, Upload, Home } from 'lucide-react'
+import { clsx } from 'clsx'
+
+const navItems = [
+  {
+    name: '首页',
+    href: '/',
+    icon: Home
+  },
+  {
+    name: '视频爬取',
+    href: '/crawler',
+    icon: Download
+  },
+  {
+    name: '编辑处理',
+    href: '/editor',
+    icon: Edit
+  },
+  {
+    name: '上传发布',
+    href: '/upload',
+    icon: Upload
+  }
+]
+
+export function Navigation() {
+  const pathname = usePathname()
+
+  return (
+    <nav className="bg-white border-b border-gray-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          {/* Logo */}
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <h1 className="text-xl font-bold text-gray-900">
+                抖音翻译搬运助手
+              </h1>
+            </div>
+          </div>
+
+          {/* 导航链接 */}
+          <div className="flex space-x-8">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href
+              const Icon = item.icon
+
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={clsx(
+                    'inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  )}
+                >
+                  <Icon className="w-4 h-4 mr-2" />
+                  {item.name}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+} 

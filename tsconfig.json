@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": [
+      "ES2020"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@douyin2youtube/server": [
+        "./packages/server/src"
+      ],
+      "@douyin2youtube/server/*": [
+        "./packages/server/src/*"
+      ],
+      "@douyin2youtube/web": [
+        "./packages/web/src"
+      ],
+      "@douyin2youtube/web/*": [
+        "./packages/web/src/*"
+      ]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*",
+    "packages/*/next.config.js",
+    "packages/*/tailwind.config.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "external",
+    "packages/*/dist",
+    "packages/*/.next"
+  ]
+}

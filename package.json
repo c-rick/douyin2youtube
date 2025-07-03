@@ -1,0 +1,38 @@
+{
+  "name": "douyin-translate-uploader",
+  "version": "1.0.0",
+  "description": "抖音翻译搬运助手（可视化控制台版）",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "start": "turbo start",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "test": "turbo test",
+    "clean": "turbo clean",
+    "dev:server": "turbo dev --filter=@douyin2youtube/server",
+    "dev:web": "turbo dev --filter=@douyin2youtube/web",
+    "build:server": "turbo build --filter=@douyin2youtube/server",
+    "build:web": "turbo build --filter=@douyin2youtube/web",
+    "crawl": "pnpm --filter crawler crawl",
+    "start-douyin-api": "bash scripts/start-douyin-api.sh",
+    "stop-douyin-api": "bash scripts/stop-douyin-api.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.5.0",
+    "turbo": "^2.5.4",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@10.12.4",
+  "dependencies": {
+    "@koa/cors": "^4.0.0",
+    "@koa/router": "^13.1.1",
+    "@types/koa__router": "^12.0.4"
+  }
+}
