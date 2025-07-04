@@ -1,13 +1,14 @@
 import { EventEmitter } from 'events'
 import { logger } from '../utils/logger'
-import { VideoProcessingTask } from '../types'
+import { CrawlingTask, VideoProcessingTask } from '../types'
+import { taskType } from './taskService'
 
 export interface TaskProcessor {
-  (task: VideoProcessingTask): Promise<void>
+  (taskId: string): Promise<void>
 }
 
 export class QueueService extends EventEmitter {
-  private queue: VideoProcessingTask[] = []
+  private queue: (VideoProcessingTask | CrawlingTask)[] = []
   private processing = false
   private processors: Map<string, TaskProcessor> = new Map()
 
@@ -17,16 +18,16 @@ export class QueueService extends EventEmitter {
   }
 
   // 注册任务处理器
-  registerProcessor(type: string, processor: TaskProcessor) {
+  registerProcessor(type: taskType, processor: TaskProcessor) {
     this.processors.set(type, processor)
     logger.info(`Task processor registered for type: ${type}`)
   }
 
   // 添加任务到队列
-  async addTask(task: Omit<VideoProcessingTask, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-    const fullTask: VideoProcessingTask = {
+  async addTask(task: VideoProcessingTask | CrawlingTask): Promise<string> {
+    const fullTask: VideoProcessingTask | CrawlingTask = {
       ...task,
-      id: this.generateTaskId(),
+      id: task.id || this.generateTaskId(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -41,12 +42,12 @@ export class QueueService extends EventEmitter {
   }
 
   // 获取任务状态
-  getTask(taskId: string): VideoProcessingTask | undefined {
+  getTask(taskId: string): VideoProcessingTask | CrawlingTask | undefined {
     return this.queue.find(task => task.id === taskId)
   }
 
   // 获取视频的所有任务
-  getVideoTasks(videoId: string): VideoProcessingTask[] {
+  getVideoTasks(videoId: string): (VideoProcessingTask | CrawlingTask)[] {
     return this.queue.filter(task => task.videoId === videoId)
   }
 
@@ -69,7 +70,7 @@ export class QueueService extends EventEmitter {
     setImmediate(() => this.processNext())
   }
 
-  private async processTask(task: VideoProcessingTask) {
+  private async processTask(task: VideoProcessingTask | CrawlingTask) {
     const processor = this.processors.get(task.type)
     if (!processor) {
       logger.error(`No processor found for task type: ${task.type}`)
@@ -87,7 +88,7 @@ export class QueueService extends EventEmitter {
 
       logger.info(`Processing task ${task.id} (${task.type}) for video ${task.videoId}`)
 
-      await processor(task)
+      await processor(task.id)
 
       task.status = 'completed'
       task.progress = 100

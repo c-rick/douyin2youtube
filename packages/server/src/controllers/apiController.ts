@@ -1,9 +1,10 @@
 import { Context } from 'koa'
 import { logger } from '../utils/logger'
 import { crawlerService } from '../services/crawlerService'
+import { videoProcessingService } from '../services/videoProcessingService'
 import { storageService } from '../services/storageService'
 import { queueService } from '../services/queueService'
-import { taskService } from '../services/taskService'
+import { taskService, TaskType } from '../services/taskService'
 import {
   ApiResponse,
   CrawlerStartRequest,
@@ -43,10 +44,13 @@ export class ApiController {
       const newTask: CrawlingTask = {
         id: taskId,
         url: body.url,
+        type: TaskType.Crawling,
         status: 'pending',
         progress: 0,
         message: '正在启动爬取任务...',
-        startTime: new Date().toISOString()
+        startTime: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       }
 
       // 添加到任务管理器
@@ -56,29 +60,13 @@ export class ApiController {
       setImmediate(async () => {
         try {
           // 更新任务状态为运行中
-          await taskService.startTask(taskId, '正在解析视频链接...')
+          await taskService.startTask(taskId, TaskType.Crawling, '正在解析视频链接...')
+          await crawlerService.processCrawlTask(taskId)
 
-          // 执行爬取，带进度回调
-          const videoId = await crawlerService.startCrawling(
-            body.url,
-            body.options,
-            (progress: number, message: string) => {
-              // 更新任务进度
-              taskService.updateTask(taskId, {
-                progress,
-                message
-              }).catch(err => {
-                logger.error(`Failed to update task progress for ${taskId}:`, err)
-              })
-            }
-          )
-
-          // 任务完成
-          await taskService.completeTask(taskId, videoId)
         } catch (error: any) {
           // 任务失败
           logger.error(`API: Crawl failed for task ${taskId}:`, error)
-          await taskService.failTask(taskId, error.message || '爬取失败')
+          await taskService.failTask(taskId, TaskType.Crawling, error.message || '爬取失败')
         }
       })
 
@@ -95,7 +83,7 @@ export class ApiController {
 
   async getVideoList(ctx: Context) {
     try {
-      const videos = await crawlerService.getVideoList()
+      const videos = await storageService.getVideoList()
 
       ctx.body = this.createResponse(true, {
         videos,
@@ -119,7 +107,7 @@ export class ApiController {
         return
       }
 
-      const task = await taskService.getTask(taskId)
+      const task = await taskService.getTask(taskId, TaskType.Crawling)
 
       if (!task) {
         ctx.status = 404
@@ -138,12 +126,12 @@ export class ApiController {
   // 获取所有爬取任务
   async getAllCrawlingTasks(ctx: Context) {
     try {
-      const tasks = await taskService.getAllTasks()
+      const tasks = await taskService.getAllTasks(TaskType.Crawling)
 
       ctx.body = this.createResponse(true, {
         tasks,
         total: tasks.length,
-        active: (await taskService.getActiveTasks()).length
+        active: (await taskService.getActiveTasks(TaskType.Crawling)).length
       })
     } catch (error: any) {
       logger.error('API: Get all crawling tasks failed:', error)
@@ -173,14 +161,17 @@ export class ApiController {
       }
 
       logger.info(`API: Starting processing for video: ${id}`)
-
+      let taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       // 添加处理任务到队列
-      const taskId = await queueService.addTask({
+      taskId = await queueService.addTask({
+        id: taskId,
         videoId: id,
-        type: 'process',
+        type: TaskType.Processing,
         status: 'pending',
         progress: 0,
-        data: body.options || {}
+        data: body.options || {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       })
 
       // 更新视频状态
@@ -188,6 +179,20 @@ export class ApiController {
         stage: 'transcribing',
         progress: 0,
         message: '准备开始处理视频...'
+      })
+
+      // 异步执行爬取任务
+      setImmediate(async () => {
+        try {
+          // 更新任务状态为运行中
+          await taskService.startTask(taskId, TaskType.Processing, '正在处理视频...')
+          await videoProcessingService.processVideoTask(taskId)
+
+        } catch (error: any) {
+          // 任务失败
+          logger.error(`API: process failed for task ${taskId}:`, error)
+          await taskService.failTask(taskId, TaskType.Processing, error.message || '处理失败', '处理失败')
+        }
       })
 
       ctx.body = this.createResponse(true, {
@@ -271,7 +276,7 @@ export class ApiController {
       // 添加上传任务到队列
       const taskId = await queueService.addTask({
         videoId: id,
-        type: 'upload',
+        type: TaskType.Uploading,
         status: 'pending',
         progress: 0,
         data: body.metadata
@@ -341,7 +346,7 @@ export class ApiController {
       }
 
       // 检查任务是否存在
-      const task = await taskService.getTask(taskId)
+      const task = await taskService.getTask(taskId, TaskType.Crawling)
       if (!task) {
         ctx.status = 404
         ctx.body = this.createResponse(false, null, '任务不存在')

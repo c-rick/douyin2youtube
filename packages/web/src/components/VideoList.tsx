@@ -3,19 +3,22 @@
 import { Play, Clock, User, Calendar } from 'lucide-react'
 import { VideoMeta } from '../stores/videoStore'
 import { formatDuration, formatDate } from '../utils/format'
+import { useRouter } from 'next/navigation'
 
 interface VideoListProps {
   videos: VideoMeta[]
   onVideoSelect?: (video: VideoMeta) => void
   onStartProcessing?: (videoId: string) => void
   selectedVideoId?: string
+  showNavigateButton?: boolean
 }
 
 export function VideoList({
   videos,
   onVideoSelect,
   onStartProcessing,
-  selectedVideoId
+  selectedVideoId,
+  showNavigateButton = false
 }: VideoListProps) {
   if (videos.length === 0) {
     return (
@@ -35,6 +38,7 @@ export function VideoList({
           isSelected={video.id === selectedVideoId}
           onSelect={() => onVideoSelect?.(video)}
           onStartProcessing={() => onStartProcessing?.(video.id)}
+          showNavigateButton={showNavigateButton}
         />
       ))}
     </div>
@@ -46,9 +50,11 @@ interface VideoCardProps {
   isSelected: boolean
   onSelect: () => void
   onStartProcessing: () => void
+  showNavigateButton?: boolean
 }
 
-function VideoCard({ video, isSelected, onSelect, onStartProcessing }: VideoCardProps) {
+function VideoCard({ video, isSelected, onSelect, onStartProcessing, showNavigateButton = false }: VideoCardProps) {
+  const router = useRouter()
   const getStatusColor = (stage: string) => {
     switch (stage) {
       case 'completed': return 'text-green-600 bg-green-50'
@@ -142,15 +148,30 @@ function VideoCard({ video, isSelected, onSelect, onStartProcessing }: VideoCard
         {/* 操作按钮 */}
         <div className="mt-4 pt-2 border-t">
           {video.status.stage === 'idle' && (
-            <button
-              className="btn-primary w-full"
-              onClick={(e) => {
-                e.stopPropagation()
-                onStartProcessing()
-              }}
-            >
-              开始处理
-            </button>
+            <>
+              {showNavigateButton ? (
+                <button
+                  className="btn-primary w-full"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // 跳转到编辑页面并选中当前视频
+                    router.push(`/editor?videoId=${video.id}`)
+                  }}
+                >
+                  开始处理
+                </button>
+              ) : (
+                <button
+                  className="btn-primary w-full"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onStartProcessing()
+                  }}
+                >
+                  开始处理
+                </button>
+              )}
+            </>
           )}
           {video.status.stage === 'completed' && (
             <div className="flex space-x-2">

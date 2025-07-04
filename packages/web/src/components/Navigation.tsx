@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Download, Edit, Upload, Home } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useMediaQuery } from 'react-responsive'
 
 const navItems = [
   {
@@ -30,17 +31,15 @@ const navItems = [
 
 export function Navigation() {
   const pathname = usePathname()
-
+  const isMobile = useMediaQuery({ query: '(max-width: 767px)' })
   return (
-    <nav className="bg-white border-b border-gray-200">
+    <nav className={`bg-white border-b border-gray-200  ${isMobile ? '' : 'sticky top-0 z-10'}`} >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           {/* Logo */}
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <h1 className="text-xl font-bold text-gray-900">
-                抖音翻译搬运助手
-              </h1>
+              <img src="/logo.svg" alt="d2y" className="w-20 h-8" />
             </div>
           </div>
 
@@ -69,6 +68,6 @@ export function Navigation() {
           </div>
         </div>
       </div>
-    </nav>
+    </nav >
   )
 } 

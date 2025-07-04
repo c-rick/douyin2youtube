@@ -2,7 +2,8 @@ import low from 'lowdb'
 import FileSync from 'lowdb/adapters/FileSync'
 import path from 'path'
 import { logger } from '../utils/logger'
-import { CrawlingTask, VideoMetadata } from '../types'
+import { CrawlingTask, VideoMetadata, VideoProcessingTask } from '../types'
+import { taskType } from './taskService'
 
 // 数据库结构
 interface DatabaseSchema {
@@ -24,6 +25,8 @@ class DatabaseService {
     // 设置默认值
     this.db.defaults({
       crawlingTasks: [],
+      processingTasks: [],
+      uploadingTasks: [],
       videos: []
     }).write()
 
@@ -31,21 +34,22 @@ class DatabaseService {
   }
 
   // 任务相关方法
-  async addTask(task: CrawlingTask): Promise<void> {
+  async addTask(task: CrawlingTask | VideoProcessingTask): Promise<void> {
     try {
-      this.db.get('crawlingTasks')
+      const taskTypeKey = task.type + 'Tasks'
+      this.db.get(taskTypeKey)
         .push(task)
         .write()
-      logger.info(`Task added: ${task.id}`)
+      logger.info(`${taskTypeKey} Task added: ${task.id}`)
     } catch (error) {
       logger.error(`Failed to add task ${task.id}:`, error)
       throw error
     }
   }
 
-  async getTask(taskId: string): Promise<CrawlingTask | undefined> {
+  async getTask(taskId: string, type: taskType): Promise<CrawlingTask | VideoProcessingTask | undefined> {
     try {
-      return this.db.get('crawlingTasks')
+      return this.db.get(type + 'Tasks')
         .find({ id: taskId })
         .value()
     } catch (error) {
@@ -54,9 +58,9 @@ class DatabaseService {
     }
   }
 
-  async updateTask(taskId: string, updates: Partial<CrawlingTask>): Promise<boolean> {
+  async updateTask(taskId: string, type: taskType, updates: Partial<CrawlingTask | VideoProcessingTask>): Promise<boolean> {
     try {
-      const task = this.db.get('crawlingTasks')
+      const task = this.db.get(type + 'Tasks')
         .find({ id: taskId })
 
       if (!task.value()) {
@@ -91,9 +95,9 @@ class DatabaseService {
     }
   }
 
-  async getAllTasks(): Promise<CrawlingTask[]> {
+  async getAllTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
     try {
-      return this.db.get('crawlingTasks')
+      return this.db.get(type + 'Tasks')
         .orderBy(['startTime'], ['desc'])
         .value()
     } catch (error) {
@@ -102,9 +106,9 @@ class DatabaseService {
     }
   }
 
-  async getActiveTasks(): Promise<CrawlingTask[]> {
+  async getActiveTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
     try {
-      return this.db.get('crawlingTasks')
+      return this.db.get(type + 'Tasks')
         .filter(task => task.status === 'pending' || task.status === 'running')
         .orderBy(['startTime'], ['asc'])
         .value()
@@ -172,22 +176,25 @@ class DatabaseService {
     try {
       const now = new Date()
       const maxAge = maxAgeDays * 24 * 60 * 60 * 1000 // 转换为毫秒
+      const types = ['crawling', 'processing', 'uploading']
+      let removedCount = 0
+      for (const type of types) {
+        const initialLength = this.db.get(type + 'Tasks').size().value()
 
-      const initialLength = this.db.get('crawlingTasks').size().value()
+        this.db.get(type + 'Tasks')
+          .remove(task => {
+            const taskDate = new Date(task.startTime)
+            return now.getTime() - taskDate.getTime() > maxAge &&
+              (task.status === 'completed' || task.status === 'failed')
+          })
+          .write()
 
-      this.db.get('crawlingTasks')
-        .remove(task => {
-          const taskDate = new Date(task.startTime)
-          return now.getTime() - taskDate.getTime() > maxAge &&
-            (task.status === 'completed' || task.status === 'failed')
-        })
-        .write()
+        const newLength = this.db.get(type + 'Tasks').size().value()
+        const removedCount = initialLength - newLength
 
-      const newLength = this.db.get('crawlingTasks').size().value()
-      const removedCount = initialLength - newLength
-
-      if (removedCount > 0) {
-        logger.info(`Cleaned up ${removedCount} old tasks`)
+        if (removedCount > 0) {
+          logger.info(`Cleaned up ${removedCount} old tasks`)
+        }
       }
       return removedCount
     } catch (error) {

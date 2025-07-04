@@ -5,7 +5,6 @@ import { logger } from './utils/logger'
 import { errorHandler } from './middleware/errorHandler'
 import { requestLogger } from './middleware/requestLogger'
 import { apiRouter } from './routes'
-
 export function createApp(): Koa {
   const app = new Koa()
 

@@ -2,6 +2,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { logger } from '../utils/logger'
 import { VideoStatus, StorageManager } from '../types'
+import { TranscriptionResult } from '../transcriber/types'
 
 export class FileStorageService implements StorageManager {
   private readonly downloadsDir: string
@@ -10,7 +11,6 @@ export class FileStorageService implements StorageManager {
   constructor(downloadsDir = path.join(process.cwd(), 'data', 'downloads')) {
     this.downloadsDir = path.resolve(downloadsDir)
     this.metaFile = path.join(this.downloadsDir, 'meta.json')
-    console.log('metaFile', this.metaFile)
     this.ensureDirectories()
   }
 
@@ -123,6 +123,33 @@ export class FileStorageService implements StorageManager {
 
   getVideoDirectory(id: string): string {
     return path.join(this.downloadsDir, id)
+  }
+
+  // 保存转写结果
+  async saveTranscriptionResult(videoId: string, result: TranscriptionResult): Promise<void> {
+    try {
+      const videoDir = this.getVideoDirectory(videoId)
+      const transcriptFile = path.join(videoDir, 'transcript.json')
+
+      await fs.writeFile(transcriptFile, JSON.stringify(result, null, 2))
+      logger.debug(`Transcription result saved for video: ${videoId}`)
+    } catch (error) {
+      logger.error(`Failed to save transcription result for video ${videoId}:`, error)
+      throw error
+    }
+  }
+
+  // 获取转写结果
+  async getTranscriptionResult(videoId: string): Promise<TranscriptionResult | null> {
+    try {
+      const videoDir = this.getVideoDirectory(videoId)
+      const transcriptFile = path.join(videoDir, 'transcript.json')
+
+      const content = await fs.readFile(transcriptFile, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      return null
+    }
   }
 }
 

@@ -7,8 +7,11 @@ import { Toaster } from 'react-hot-toast'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: '抖音翻译搬运助手',
+  title: 'd2y',
   description: '自动化抖音视频爬取、翻译、配音、合成并上传至YouTube的工具',
+  icons: {
+    icon: '/logo.svg',
+  },
 }
 
 export default function RootLayout({

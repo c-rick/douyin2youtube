@@ -27,12 +27,6 @@
       "@/*": [
         "./src/*"
       ],
-      "@douyin2youtube/shared": [
-        "../shared/src"
-      ],
-      "@douyin2youtube/shared/*": [
-        "../shared/src/*"
-      ]
     }
   },
   "include": [

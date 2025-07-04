@@ -1,5 +1,3 @@
-// TODO: 等 shared 包构建完成后取消注释
-// export * from '@douyin2youtube/shared'
 
 // 服务器特有的类型定义
 
@@ -14,7 +12,7 @@ export interface ApiResponse<T = any> {
 export interface VideoProcessingTask {
   id: string
   videoId: string
-  type: 'crawl' | 'process' | 'upload'
+  type: 'processing'
   status: 'pending' | 'running' | 'completed' | 'failed'
   progress: number
   createdAt: string
@@ -35,13 +33,17 @@ export interface CrawlerStartRequest {
 export interface CrawlingTask {
   id: string
   url: string
+  type: 'crawling'
   status: 'pending' | 'running' | 'completed' | 'failed'
   progress: number
   message: string
   error?: string
+  createdAt: string
+  updatedAt: string
   startTime: string
   endTime?: string
   videoId?: string
+  options?: any
 }
 
 export interface ProcessVideoRequest {

@@ -19,7 +19,19 @@
       "startTime": "2025-07-03T09:03:23.914Z",
       "endTime": "2025-07-03T09:03:43.397Z",
       "videoId": "20250703_6ha9umxj"
+    },
+    {
+      "id": "task_1751613240743",
+      "url": "https://www.douyin.com/video/7521256553090010408",
+      "status": "completed",
+      "progress": 100,
+      "message": "爬取完成",
+      "startTime": "2025-07-04T07:14:00.764Z",
+      "endTime": "2025-07-04T07:14:32.536Z",
+      "videoId": "20250704_0q08v97q"
     }
   ],
-  "videos": []
+  "videos": [],
+  "processingTasks": [],
+  "uploadingTasks": []
 }

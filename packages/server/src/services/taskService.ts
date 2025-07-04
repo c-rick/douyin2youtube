@@ -1,6 +1,14 @@
 import { logger } from '../utils/logger'
-import { CrawlingTask } from '../types'
+import { CrawlingTask, VideoProcessingTask } from '../types'
 import { databaseService } from './databaseService'
+
+export enum TaskType {
+  Crawling = 'crawling',
+  Processing = 'processing',
+  Uploading = 'uploading'
+}
+
+export type taskType = TaskType.Crawling | TaskType.Processing | TaskType.Uploading
 
 class TaskService {
   // 添加新任务
@@ -15,9 +23,9 @@ class TaskService {
   }
 
   // 更新任务状态
-  async updateTask(taskId: string, updates: Partial<CrawlingTask>): Promise<void> {
+  async updateTask(taskId: string, type: taskType, updates: Partial<CrawlingTask | VideoProcessingTask>): Promise<void> {
     try {
-      await databaseService.updateTask(taskId, updates)
+      await databaseService.updateTask(taskId, type, updates)
       logger.info(`Task updated: ${taskId}, status: ${updates.status || 'unknown'}, progress: ${updates.progress || 0}%`)
     } catch (error) {
       logger.error(`Failed to update task ${taskId}:`, error)
@@ -26,9 +34,9 @@ class TaskService {
   }
 
   // 获取任务状态
-  async getTask(taskId: string): Promise<CrawlingTask | null> {
+  async getTask(taskId: string, type: taskType): Promise<CrawlingTask | VideoProcessingTask | null> {
     try {
-      const task = await databaseService.getTask(taskId)
+      const task = await databaseService.getTask(taskId, type)
       return task || null
     } catch (error) {
       logger.error(`Failed to get task ${taskId}:`, error)
@@ -37,9 +45,9 @@ class TaskService {
   }
 
   // 获取所有任务
-  async getAllTasks(): Promise<CrawlingTask[]> {
+  async getAllTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
     try {
-      return await databaseService.getAllTasks()
+      return await databaseService.getAllTasks(type) as CrawlingTask[] | VideoProcessingTask[]
     } catch (error) {
       logger.error('Failed to get all tasks:', error)
       return []
@@ -47,9 +55,9 @@ class TaskService {
   }
 
   // 获取活跃任务（pending 或 running）
-  async getActiveTasks(): Promise<CrawlingTask[]> {
+  async getActiveTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
     try {
-      return await databaseService.getActiveTasks()
+      return await databaseService.getActiveTasks(type)
     } catch (error) {
       logger.error('Failed to get active tasks:', error)
       return []
@@ -81,29 +89,29 @@ class TaskService {
   }
 
   // 设置任务为完成状态
-  async completeTask(taskId: string, videoId?: string): Promise<void> {
-    await this.updateTask(taskId, {
+  async completeTask(taskId: string, type: taskType, videoId?: string, message: string = '爬取完成'): Promise<void> {
+    await this.updateTask(taskId, type, {
       status: 'completed',
       progress: 100,
-      message: '爬取完成',
+      message,
       endTime: new Date().toISOString(),
       videoId
     })
   }
 
   // 设置任务为失败状态
-  async failTask(taskId: string, error: string): Promise<void> {
-    await this.updateTask(taskId, {
+  async failTask(taskId: string, type: taskType, error: string, message: string = '爬取失败'): Promise<void> {
+    await this.updateTask(taskId, type, {
       status: 'failed',
-      message: '爬取失败',
+      message,
       error,
       endTime: new Date().toISOString()
     })
   }
 
   // 设置任务为运行状态
-  async startTask(taskId: string, message: string = '开始爬取'): Promise<void> {
-    await this.updateTask(taskId, {
+  async startTask(taskId: string, type: taskType, message: string = '开始爬取'): Promise<void> {
+    await this.updateTask(taskId, type, {
       status: 'running',
       message,
       progress: 0

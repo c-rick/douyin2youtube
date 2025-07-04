@@ -273,6 +273,7 @@ export default function CrawlerPage() {
               videos={videos}
               onVideoSelect={handleVideoSelect}
               onStartProcessing={handleStartProcessing}
+              showNavigateButton={true}
             />
           </>
         )}

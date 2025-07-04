@@ -1,14 +1,19 @@
 import { createApp } from './app'
 import { logger } from './utils/logger'
 import dotenv from 'dotenv'
+import path from 'path'
 
 // 加载环境变量
-dotenv.config()
+dotenv.config({
+  path: path.join(process.cwd(), '.env')
+})
+
 
 const PORT = process.env.PORT || 3001
 
 async function startServer() {
   try {
+    logger.info('process.env.OPENAI_API_KEY: ' + process.env.OPENAI_API_KEY)
     const app = createApp()
 
     app.listen(PORT, () => {
