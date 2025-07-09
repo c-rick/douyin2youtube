@@ -24,7 +24,6 @@ export default function CrawlerPage() {
     fetchCrawlingTasks
   } = useVideoStore()
 
-
   useEffect(() => {
     // 页面加载时获取视频列表
     fetchVideos()
@@ -157,7 +156,7 @@ export default function CrawlerPage() {
           </div>
 
           {isTasksExpanded && (
-            <div className="space-y-3 mt-4">
+            <div className="space-y-3 mt-4 max-h-[300px] overflow-y-auto">
               {crawlingTasks.map((task) => (
                 <div key={task.id} className="border rounded-lg p-4 bg-gray-50">
                   <div className="flex items-center justify-between">
@@ -221,7 +220,7 @@ export default function CrawlerPage() {
                       onClick={async (e) => {
                         e.stopPropagation() // 防止触发任务列表的展开/折叠
                         try {
-                          await removeCrawlingTask(task.id)
+                          task.id && await removeCrawlingTask(task.id)
                           toast.success('任务已删除')
                         } catch (error) {
                           console.error('Failed to remove task:', error)
@@ -259,7 +258,7 @@ export default function CrawlerPage() {
 
         {isVideosExpanded && (
           <>
-            <div className="flex justify-end mt-4 mb-6">
+            <div className="flex justify-end mt-4 mb-6 ">
               <button
                 onClick={fetchVideos}
                 disabled={isLoading}
@@ -268,13 +267,14 @@ export default function CrawlerPage() {
                 {isLoading ? '刷新中...' : '刷新列表'}
               </button>
             </div>
-
-            <VideoList
-              videos={videos}
-              onVideoSelect={handleVideoSelect}
-              onStartProcessing={handleStartProcessing}
-              showNavigateButton={true}
-            />
+            <div className="max-h-[900px] overflow-y-auto">
+              <VideoList
+                videos={videos}
+                onVideoSelect={handleVideoSelect}
+                onStartProcessing={handleStartProcessing}
+                showNavigateButton={true}
+              />
+            </div>
           </>
         )}
       </div>

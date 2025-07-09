@@ -1,5 +1,20 @@
 import { z } from 'zod'
 
+
+// 字幕数据
+export const SubtitleSchema = z.object({
+  start: z.number(),
+  end: z.number(),
+  text: z.string(),
+})
+
+export const TranslationSchema = z.object({
+  start: z.number(),
+  end: z.number(),
+  originalText: z.string(),
+  translatedText: z.string()
+})
+
 // 视频元数据
 export const VideoMetaSchema = z.object({
   id: z.string(),
@@ -10,32 +25,87 @@ export const VideoMetaSchema = z.object({
   duration: z.number(),
   shareUrl: z.string(),
   createdAt: z.string(),
-  status: z.enum(['pending', 'downloading', 'downloaded', 'processing', 'completed', 'failed'])
+  status: z.object({
+    stage: z.string(),
+    progress: z.number(),
+    message: z.string()
+  }),
+  downloadTime: z.string().optional(),
+  localPaths: z.object({
+    video: z.string(),
+    cover: z.string(),
+    meta: z.string(),
+    directory: z.string()
+  }).optional(),
+  remotePaths: z.object({
+    video: z.string(),
+    cover: z.string(),
+    meta: z.string(),
+    directory: z.string()
+  }).optional(),
+  segments: z.array(SubtitleSchema).optional(),
+  translation: z.array(TranslationSchema).optional()
 })
 
 export type VideoMeta = z.infer<typeof VideoMetaSchema>
 
-// 字幕数据
-export const SubtitleSchema = z.object({
-  start: z.number(),
-  end: z.number(),
-  text: z.string(),
-  translatedText: z.string().optional()
-})
 
 export type Subtitle = z.infer<typeof SubtitleSchema>
 
-// 处理状态
-export const ProcessingStatusSchema = z.object({
-  videoId: z.string(),
-  step: z.enum(['transcribe', 'translate', 'synthesize', 'edit', 'upload']),
-  status: z.enum(['pending', 'processing', 'completed', 'failed']),
-  progress: z.number().min(0).max(100),
-  error: z.string().optional(),
-  result: z.any().optional()
-})
 
-export type ProcessingStatus = z.infer<typeof ProcessingStatusSchema>
+// 共享的进度类型定义
+
+export type ProcessingStage =
+  | 'idle'
+  | 'downloading'
+  | 'transcribing'
+  | 'translating'
+  | 'synthesizing'
+  | 'editing'
+  | 'uploading'
+  | 'completed'
+  | 'error'
+export type CrawlStatus = 'pending' | 'crawling' | 'completed' | 'failed'
+export type ProcessingStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+
+export interface ProcessingProgress {
+  stage: ProcessingStage
+  status: ProcessingStatus
+  progress: number
+  message: string
+  error?: string
+  startTime?: string
+  endTime?: string
+}
+
+// 转录进度类型（继承自ProcessingProgress）
+export interface TranscriptionProgress extends ProcessingProgress {
+  stage: 'transcribing' | 'completed' | 'error'
+}
+
+// 翻译进度类型（继承自ProcessingProgress）
+export interface TranslationProgress extends ProcessingProgress {
+  stage: 'translating' | 'completed' | 'error'
+}
+
+// 语音合成进度类型
+export interface SynthesisProgress extends ProcessingProgress {
+  stage: 'synthesizing' | 'completed' | 'error'
+}
+
+// 视频编辑进度类型
+export interface EditingProgress extends ProcessingProgress {
+  stage: 'editing' | 'completed' | 'error'
+}
+
+// 上传进度类型
+export interface UploadProgress extends ProcessingProgress {
+  stage: 'uploading' | 'completed' | 'error'
+}
 
 // API 响应
 export const ApiResponseSchema = z.object({
@@ -50,7 +120,7 @@ export type ApiResponse = z.infer<typeof ApiResponseSchema>
 export interface CrawlingTask {
   id: string
   url: string
-  status: 'pending' | 'crawling' | 'completed' | 'failed'
+  status: CrawlStatus
   progress: number
   startTime: string
   endTime?: string

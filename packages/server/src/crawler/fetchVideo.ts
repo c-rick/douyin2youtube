@@ -107,7 +107,11 @@ export async function fetchDouyinMeta(
       duration: Math.floor((videoData.duration || 0) / 1000),
       shareUrl,
       createdAt: new Date().toISOString(),
-      status: 'pending'
+      status: {
+        stage: 'pending',
+        progress: 0,
+        message: '准备视频处理...',
+      }
     }
 
     console.log(`✅ 视频信息获取成功: ${videoMeta.title}`)
@@ -289,7 +293,7 @@ export async function crawlVideo(
     const videoMeta = await fetchDouyinMeta(shareUrl, options)
 
     // 创建输出目录
-    const videoDir = path.join(outputDir, videoMeta.id)
+    const videoDir = outputDir
     await fs.ensureDir(videoDir)
 
     // 定义文件路径

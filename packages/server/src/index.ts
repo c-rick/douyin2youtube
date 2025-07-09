@@ -5,7 +5,7 @@ import path from 'path'
 
 // 加载环境变量
 dotenv.config({
-  path: path.join(process.cwd(), '.env')
+  path: path.join(process.cwd(), '..', '..', '.env')
 })
 
 
@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 3001
 
 async function startServer() {
   try {
-    logger.info('process.env.OPENAI_API_KEY: ' + process.env.OPENAI_API_KEY)
     const app = createApp()
 
     app.listen(PORT, () => {

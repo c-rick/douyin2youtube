@@ -1,5 +1,7 @@
 import Router from 'koa-router'
 import { apiController } from '../controllers/apiController'
+import * as path from 'path'
+import * as fs from 'fs'
 
 const router = new Router({
   prefix: '/api'
@@ -12,8 +14,21 @@ router.get('/crawler/status/:taskId', apiController.getCrawlingTaskStatus.bind(a
 router.get('/crawler/tasks', apiController.getAllCrawlingTasks.bind(apiController))
 router.delete('/crawler/tasks/:taskId', apiController.deleteCrawlingTask.bind(apiController))
 
+// 视频资源
+router.get('/files/:id/:fpath', async (ctx) => {
+  const { id, fpath } = ctx.params
+  const filePath = path.join(process.cwd(), 'data', 'downloads', id, fpath)
+  console.log('filePath', filePath)
+  ctx.body = fs.createReadStream(filePath)
+})
+// 更新字幕翻译
+router.post('/translation/:videoId/:subtitleId', apiController.updateTranslation.bind(apiController))
+
 // 视频处理路由
 router.post('/process/:id', apiController.startProcessing.bind(apiController))
+
+// 重试特定步骤路由
+router.post('/retry/:id/:step', apiController.retryStep.bind(apiController))
 
 // 状态查询路由
 router.get('/status/:id', apiController.getVideoStatus.bind(apiController))

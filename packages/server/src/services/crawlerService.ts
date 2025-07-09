@@ -1,16 +1,14 @@
+import * as path from 'path'
 import { crawlVideo } from '../crawler'
 import { logger } from '../utils/logger'
 import { storageService } from './storageService'
-import { queueService, TaskProcessor } from './queueService'
+import { queueService, TaskProcessor, TaskType, taskType } from './queueService'
 import { CrawlingTask, VideoProcessingTask } from '../types'
-import { taskService, TaskType, taskType } from './taskService'
 
-export class CrawlerService {
+class CrawlerService {
   taskType: taskType
   constructor() {
     this.taskType = TaskType.Crawling
-    // 注册爬取任务处理器
-    queueService.registerProcessor(TaskType.Crawling, this.processCrawlTask.bind(this))
   }
 
   // 开始爬取任务
@@ -56,7 +54,7 @@ export class CrawlerService {
       // 报告进度：下载完成
       progressCallback?.(70, '视频下载完成，保存元数据...')
 
-      // 保存视频元数据
+      // 保存完整的视频元数据
       const videoMeta = {
         id: videoId,
         title: result.videoMeta.title || '未知标题',
@@ -73,10 +71,16 @@ export class CrawlerService {
           message: '视频下载完成，等待处理'
         },
         localPaths: {
-          video: result.paths.video,
-          cover: result.paths.cover,
-          meta: result.paths.meta,
-          directory: videoDir
+          video: result.paths.video || '',
+          cover: result.paths.cover || '',
+          meta: result.paths.meta || '',
+          directory: result.paths.video ? path.dirname(result.paths.video) : ''
+        },
+        remotePaths: {
+          video: result.paths.video ? `/api/files/${videoId}/${path.basename(result.paths.video)}` : '',
+          cover: result.paths.cover ? `/api/files/${videoId}/${path.basename(result.paths.cover)}` : '',
+          meta: result.paths.meta ? `/api/files/${videoId}/${path.basename(result.paths.meta)}` : '',
+          directory: `/api/files/${videoId}`
         }
       }
 
@@ -113,7 +117,7 @@ export class CrawlerService {
 
   // 处理爬取任务
   public async processCrawlTask(taskId: string): Promise<void> {
-    const task = await taskService.getTask(taskId, this.taskType) as CrawlingTask
+    const task = await queueService.getTask(taskId, this.taskType) as CrawlingTask
     if (!task) {
       throw new Error(`Task not found: ${taskId}`)
     }
@@ -122,14 +126,15 @@ export class CrawlerService {
 
     try {
       const videoId = await this.startCrawling(url, options, (progress: number, message: string) => {
-        taskService.updateTask(taskId, this.taskType, {
+        queueService.updateTask(taskId, this.taskType, {
+          status: 'running',
           progress,
           message
         })
       })
 
       // 任务完成
-      await taskService.completeTask(taskId, this.taskType, videoId)
+      await queueService.completeTask(taskId, this.taskType, videoId)
     } catch (error: any) {
       logger.error(`Crawl failed for video ${videoId}:`, error)
 

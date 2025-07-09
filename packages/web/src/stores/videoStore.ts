@@ -19,6 +19,14 @@ export interface VideoMeta {
     meta?: string
     directory?: string
   }
+  remotePaths?: {
+    video?: string
+    cover?: string
+    meta?: string
+    directory?: string
+  }
+  segments?: Subtitle[]
+  translation?: Translation[]
 }
 
 export interface ProcessingStatus {
@@ -29,7 +37,7 @@ export interface ProcessingStatus {
 }
 
 export interface CrawlingTask {
-  id: string
+  id?: string
   url: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   progress: number
@@ -41,10 +49,18 @@ export interface CrawlingTask {
 }
 
 export interface Subtitle {
+  id: string
   start: number
   end: number
   text: string
-  translation?: string
+}
+
+export interface Translation {
+  id: string
+  start: number
+  end: number
+  originalText: string
+  translatedText: string
 }
 
 interface VideoStore {
@@ -58,25 +74,30 @@ interface VideoStore {
   setVideos: (videos: VideoMeta[]) => void
   addVideo: (video: VideoMeta) => void
   updateVideo: (id: string, updates: Partial<VideoMeta>) => void
+  updateTranslation: (videoId: string, subtitleId: string, translation: string) => void
   setCurrentVideo: (video: VideoMeta | null) => void
   setLoading: (loading: boolean) => void
 
   // 任务管理
   addCrawlingTask: (task: CrawlingTask) => void
   updateCrawlingTask: (id: string, updates: Partial<CrawlingTask>) => void
+  updateProcessingTask: (id: string, updates: Partial<ProcessingStatus>) => void
   removeCrawlingTask: (id: string) => void
   setCrawlingTasks: (tasks: CrawlingTask[]) => void
   fetchCrawlingTasks: () => Promise<void>
 
   // API 调用
-  fetchVideos: () => Promise<void>
+  fetchVideos: () => Promise<VideoMeta[]>
+  fetchVideoStatus: (videoId: string) => Promise<void>
   startCrawling: (url: string) => Promise<void>
   startProcessing: (videoId: string) => Promise<void>
+  retryStep: (videoId: string, step: string) => Promise<void>
   uploadToYouTube: (videoId: string, metadata: { title: string, description: string, tags: string[] }) => Promise<void>
 
   // 轮询
-  pollTaskStatus: (taskId: string) => Promise<void>
+  pollCrawlerTaskStatus: (taskId: string) => Promise<void>
 
+  apiBaseUrl: string
 }
 
 let pollingInterval: NodeJS.Timeout | null = null
@@ -87,6 +108,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   currentVideo: null,
   isLoading: false,
   crawlingTasks: [],
+  apiBaseUrl: API_BASE_URL,
 
   // 基础操作
   setVideos: (videos) => set({ videos }),
@@ -98,10 +120,16 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   updateVideo: (id, updates) => set((state) => ({
     videos: state.videos.map(video =>
       video.id === id ? { ...video, ...updates } : video
-    )
+    ),
+    currentVideo: state.currentVideo?.id === id ? { ...state.currentVideo, ...updates } : state.currentVideo
   })),
 
-  setCurrentVideo: (video) => set({ currentVideo: video }),
+  setCurrentVideo: (video) => {
+    if (video && (video.id === get().currentVideo?.id)) {
+      return
+    }
+    set({ currentVideo: video })
+  },
 
   setLoading: (loading) => set({ isLoading: loading }),
 
@@ -109,12 +137,18 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   setCrawlingTasks: (tasks) => set({ crawlingTasks: tasks }),
 
   addCrawlingTask: (task) => set((state) => ({
-    crawlingTasks: [...state.crawlingTasks, task]
+    crawlingTasks: [task, ...state.crawlingTasks]
   })),
 
   updateCrawlingTask: (id, updates) => set((state) => ({
     crawlingTasks: state.crawlingTasks.map(task =>
       task.id === id ? { ...task, ...updates } : task
+    )
+  })),
+
+  updateProcessingTask: (id, updates) => set((state) => ({
+    videos: state.videos.map(video =>
+      video.id === id ? { ...video, ...updates } : video
     )
   })),
 
@@ -199,6 +233,7 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
         console.error('API response format error:', result)
         set({ videos: [] })
       }
+      return result.data.videos
     } catch (error) {
       console.error('Failed to fetch videos:', error)
       set({ videos: [] })
@@ -207,14 +242,42 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
     }
   },
 
+  // 获取单个视频状态
+  fetchVideoStatus: async (videoId: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/video/${videoId}`)
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      if (result.success && result.data) {
+        // 更新对应的视频状态
+        const videoData = result.data.video
+        const statusData = result.data.status
+
+        if (videoData && statusData) {
+          get().updateVideo(videoId, {
+            ...videoData,
+            status: statusData
+          })
+        }
+      } else {
+        console.error('API response format error:', result)
+      }
+    } catch (error) {
+      console.error('Failed to fetch video status:', error)
+    }
+  },
+
   startCrawling: async (url: string) => {
     try {
       set({ isLoading: true })
-
-      // 创建新的爬取任务
-      const taskId = `task_${Date.now()}`
+      const tmpTaskId = `task_${Date.now()}`
       const newTask: CrawlingTask = {
-        id: taskId,
+        id: tmpTaskId,
         url,
         status: 'pending',
         progress: 0,
@@ -224,10 +287,11 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
 
       get().addCrawlingTask(newTask)
 
+
       const response = await fetch(`${API_BASE_URL}/api/crawler/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, taskId })
+        body: JSON.stringify({ url })
       })
 
       if (!response.ok) {
@@ -235,17 +299,18 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
       }
 
       const result = await response.json()
-
+      const taskId = result.data.taskId
       if (result.success) {
         // 更新任务状态为运行中
-        get().updateCrawlingTask(taskId, {
+        get().updateCrawlingTask(tmpTaskId, {
+          id: taskId,
           status: 'running',
           message: '正在解析视频链接...',
           videoId: result.data?.videoId
         })
 
         // 开始轮询任务状态
-        get().pollTaskStatus(taskId)
+        get().pollCrawlerTaskStatus(taskId)
       } else {
         // 更新任务状态为失败
         get().updateCrawlingTask(taskId, {
@@ -279,8 +344,37 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
       if (!result.success) {
         throw new Error(result.message || '处理失败')
       }
+      if (result.data.taskId) {
+      } else {
+        throw new Error(result.message || '处理失败')
+      }
+
+      get().fetchVideoStatus(videoId)
     } catch (error) {
       console.error('Failed to start processing:', error)
+      throw error
+    }
+  },
+
+  retryStep: async (videoId: string, step: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/retry/${videoId}/${step}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ options: {} })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.message || '重试失败')
+      }
+    } catch (error) {
+      console.error('Failed to retry step:', error)
       throw error
     }
   },
@@ -309,9 +403,10 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
   },
 
   // 轮询任务状态
-  pollTaskStatus: async (taskId: string) => {
+  pollCrawlerTaskStatus: async (taskId: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/crawler/status/${taskId}`)
+
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -324,11 +419,11 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
         get().updateCrawlingTask(taskId, taskStatus)
 
         // 如果任务完成或失败，获取最新的视频列表
-        if (taskStatus.status === 'completed' || taskStatus.status === 'failed') {
+        if (taskStatus.status === 'completed' || taskStatus.status === 'error') {
           get().fetchVideos()
         } else {
           setTimeout(() => {
-            get().pollTaskStatus(taskId)
+            get().pollCrawlerTaskStatus(taskId)
           }, 3000)
         }
       }
@@ -336,5 +431,20 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
       console.error('Failed to poll task status:', error)
     }
   },
+
+
+  updateTranslation: async (videoId: string, subtitleId: string, translation: string) => {
+    try {
+      await fetch(`${API_BASE_URL}/api/translation/${videoId}/${subtitleId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ translation })
+      })
+      get().fetchVideoStatus(videoId)
+    } catch (error) {
+      console.error('Failed to update translation:', error)
+      throw error
+    }
+  }
 
 })) 

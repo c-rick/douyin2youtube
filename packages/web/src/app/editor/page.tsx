@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { useVideoStore } from '../../stores/videoStore'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { useVideoStore, VideoMeta } from '../../stores/videoStore'
 import { VideoList } from '../../components/VideoList'
 import {
   Edit,
@@ -21,24 +21,33 @@ import {
   Eye,
   EyeOff,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export default function EditorPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const {
     videos,
     currentVideo,
     isLoading,
     fetchVideos,
+    fetchVideoStatus,
     setCurrentVideo,
     startProcessing,
-    updateVideo
+    retryStep,
+    updateVideo,
+    apiBaseUrl,
   } = useVideoStore()
 
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'subtitles' | 'settings'>('overview')
   const [isAutoRefresh, setIsAutoRefresh] = useState(true)
   const [isVideoListCollapsed, setIsVideoListCollapsed] = useState(false)
+  const [expandedTranslation, setExpandedTranslation] = useState(false)
+  const [expandedSynthesis, setExpandedSynthesis] = useState(false)
 
   // 过滤出可以编辑的视频（已下载但未完成处理）
   const editableVideos = videos.filter(video =>
@@ -52,42 +61,43 @@ export default function EditorPage() {
   )
 
   useEffect(() => {
-    fetchVideos()
-  }, [fetchVideos])
+    fetchVideos().then((videos) => {
+      const videoId = searchParams.get('videoId')
+      if (videoId && videos.length > 0) {
+        const video = videos.find(v => v.id === videoId)
+        if (video) {
+          setCurrentVideo(video)
+          fetchVideoStatus(video.id)
+        }
+      } else if (videos.length > 0) {
+        setCurrentVideo(videos[0])
+        fetchVideoStatus(videos[0].id)
+      }
+    })
+  }, [searchParams, fetchVideos])
+
 
   // 根据 URL 参数选中视频
   useEffect(() => {
-    const videoId = searchParams.get('videoId')
-    if (videoId && videos.length > 0) {
-      const video = videos.find(v => v.id === videoId)
-      if (video) {
-        setCurrentVideo(video)
-      }
-    }
-  }, [searchParams, videos, setCurrentVideo])
 
-  // 自动刷新状态
+
+  }, [searchParams, videos])
+
+  // 自动刷新选中视频的状态
   useEffect(() => {
-    if (!isAutoRefresh) return
+    if (!isAutoRefresh || !currentVideo) return
 
     const interval = setInterval(() => {
-      fetchVideos()
-    }, 5000) // 每5秒刷新一次
+      fetchVideoStatus(currentVideo.id)
+    }, 5000) // 每5秒刷新一次选中视频的状态
 
     return () => clearInterval(interval)
-  }, [isAutoRefresh, fetchVideos])
+  }, [isAutoRefresh, currentVideo])
 
   const handleStartProcessing = async (videoId: string) => {
     try {
+      toast.success('正在启动处理流程...')
       await startProcessing(videoId)
-      // 更新视频状态为转写中
-      updateVideo(videoId, {
-        status: {
-          stage: 'transcribing',
-          progress: 0,
-          message: '正在启动处理流程...'
-        }
-      })
     } catch (error) {
       console.error('Failed to start processing:', error)
       updateVideo(videoId, {
@@ -103,18 +113,27 @@ export default function EditorPage() {
 
   const handleRetryStep = async (videoId: string, step: string) => {
     try {
-      // 这里可以添加针对特定步骤的重试逻辑
-      await startProcessing(videoId)
+      await retryStep(videoId, step)
+      // 立即更新视频状态
+      setTimeout(() => {
+        fetchVideoStatus(videoId)
+      }, 1000)
     } catch (error) {
       console.error('Failed to retry step:', error)
+      updateVideo(videoId, {
+        status: {
+          stage: 'error',
+          progress: 0,
+          message: '重试失败',
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      })
     }
   }
 
-  const tabs = [
-    { id: 'overview', name: '处理概览', icon: Edit },
-    { id: 'subtitles', name: '字幕编辑', icon: FileText },
-    { id: 'settings', name: '处理设置', icon: Settings }
-  ]
+  const handleGoToUpload = (videoId: string) => {
+    router.push(`/upload?videoId=${videoId}`)
+  }
 
   return (
     <div className="space-y-8">
@@ -132,24 +151,42 @@ export default function EditorPage() {
         <div className="flex items-center space-x-4">
           {/* 自动刷新开关 */}
           <button
-            onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isAutoRefresh
-              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            onClick={() => currentVideo && setIsAutoRefresh(!isAutoRefresh)}
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${!currentVideo
+              ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
+              : isAutoRefresh
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
+            title={currentVideo ? `自动刷新选中视频 "${currentVideo.title}" 的状态` : '选择视频后可自动刷新状态'}
+            disabled={!currentVideo}
           >
             {isAutoRefresh ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-            <span>自动刷新</span>
+            <span>自动刷新选中视频</span>
           </button>
 
-          {/* 手动刷新按钮 */}
+          {/* 手动刷新选中视频按钮 */}
+          {currentVideo && (
+            <button
+              onClick={() => fetchVideoStatus(currentVideo.id)}
+              disabled={isLoading}
+              className="flex items-center space-x-2 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+              title={`刷新视频 "${currentVideo.title}" 的状态`}
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>刷新选中视频</span>
+            </button>
+          )}
+
+          {/* 手动刷新所有视频按钮 */}
           <button
             onClick={() => fetchVideos()}
             disabled={isLoading}
-            className="flex items-center space-x-2 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+            className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+            title="刷新所有视频列表"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>刷新</span>
+            <span>刷新列表</span>
           </button>
         </div>
       </div>
@@ -179,11 +216,23 @@ export default function EditorPage() {
             </div>
 
             {!isVideoListCollapsed && (
-              <div className="overflow-y-auto max-h-[calc(100vh-12rem)] grid grid-cols-1 gap-2">
+              <div className="overflow-y-auto max-h-[1250px] grid grid-cols-1 gap-2">
                 {editableVideos.map((video) => {
                   const isSelected = video.id === currentVideo?.id
                   return (
-                    <img onClick={() => setCurrentVideo(video)} src={video.coverUrl} alt={video.title} className={`w-full h-24 object-cover rounded-lg ${isSelected ? 'border-2 border-gray-600 p-2' : ''}`} />
+                    <img
+                      key={video.id}
+                      onClick={() => {
+                        setCurrentVideo(video)
+                        fetchVideoStatus(video.id)
+                      }}
+                      src={video.coverUrl}
+                      alt={video.title}
+                      className={`w-full h-24 object-cover rounded-lg cursor-pointer transition-all duration-200 ${isSelected
+                        ? 'border-2 border-blue-500 p-2 shadow-lg'
+                        : 'border-2 border-transparent hover:border-gray-300'
+                        }`}
+                    />
                   )
                 })}
               </div>
@@ -198,10 +247,32 @@ export default function EditorPage() {
               {/* 视频信息卡片 */}
               <div className="card">
                 <div className="flex items-start space-x-4">
-                  <img
-                    src={currentVideo.coverUrl}
-                    alt={currentVideo.title}
-                    className="w-32 h-24 object-cover rounded-lg"
+                  <video
+                    src={apiBaseUrl + currentVideo.remotePaths?.video || currentVideo.videoUrl}
+                    poster={currentVideo.coverUrl}
+                    className="w-32 h-24 object-cover rounded-lg cursor-pointer"
+                    muted
+                    loop
+                    onMouseEnter={(e) => {
+                      const video = e.target as HTMLVideoElement
+                      video.play().catch(() => {
+                        // 如果播放失败，静默处理
+                      })
+                    }}
+                    onMouseLeave={(e) => {
+                      const video = e.target as HTMLVideoElement
+                      video.pause()
+                      video.currentTime = 0
+                    }}
+                    onError={(e) => {
+                      // 如果视频加载失败，显示封面图
+                      const video = e.target as HTMLVideoElement
+                      const img = document.createElement('img')
+                      img.src = currentVideo.coverUrl
+                      img.alt = currentVideo.title
+                      img.className = video.className
+                      video.parentNode?.replaceChild(img, video)
+                    }}
                   />
                   <div className="flex-1">
                     <h2 className="text-xl font-semibold text-gray-900 mb-2">
@@ -213,6 +284,12 @@ export default function EditorPage() {
                       <span>状态: {getStatusText(currentVideo.status.stage)}</span>
                       {currentVideo.status.stage !== 'idle' && currentVideo.status.stage !== 'completed' && (
                         <span>进度: {currentVideo.status.progress}%</span>
+                      )}
+                      {isAutoRefresh && (
+                        <span className="flex items-center text-green-600">
+                          <RefreshCw className="w-3 h-3 mr-1" />
+                          自动刷新中
+                        </span>
                       )}
                     </div>
                     {currentVideo.status.message && (
@@ -229,43 +306,18 @@ export default function EditorPage() {
                 </div>
               </div>
 
-              {/* 标签页导航 */}
-              <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8">
-                  {tabs.map((tab) => {
-                    const Icon = tab.icon
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setSelectedTab(tab.id as any)}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm ${selectedTab === tab.id
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                          }`}
-                      >
-                        <Icon className="w-4 h-4 inline mr-2" />
-                        {tab.name}
-                      </button>
-                    )
-                  })}
-                </nav>
-              </div>
-
-              {/* 标签页内容 */}
+              {/* 处理概览 */}
               <div className="card">
-                {selectedTab === 'overview' && (
-                  <ProcessingOverview
-                    video={currentVideo}
-                    onStartProcessing={handleStartProcessing}
-                    onRetryStep={handleRetryStep}
-                  />
-                )}
-                {selectedTab === 'subtitles' && (
-                  <SubtitleEditor video={currentVideo} />
-                )}
-                {selectedTab === 'settings' && (
-                  <ProcessingSettings video={currentVideo} />
-                )}
+                <ProcessingOverview
+                  video={currentVideo}
+                  onStartProcessing={handleStartProcessing}
+                  onRetryStep={handleRetryStep}
+                  onGoToUpload={handleGoToUpload}
+                  expandedTranslation={expandedTranslation}
+                  setExpandedTranslation={setExpandedTranslation}
+                  expandedSynthesis={expandedSynthesis}
+                  setExpandedSynthesis={setExpandedSynthesis}
+                />
               </div>
             </div>
           ) : (
@@ -274,9 +326,17 @@ export default function EditorPage() {
               <h3 className="text-lg font-medium text-gray-900 mb-2">
                 请选择视频
               </h3>
-              <p className="text-gray-600">
+              <p className="text-gray-600 mb-4">
                 从左侧列表中选择一个视频进行编辑处理
               </p>
+              <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-4 max-w-md mx-auto">
+                <p className="mb-2">💡 <strong>提示：</strong></p>
+                <ul className="text-left space-y-1">
+                  <li>• 选择视频后可启用自动刷新功能</li>
+                  <li>• 自动刷新仅更新选中视频的状态</li>
+                  <li>• 处理中的视频状态会实时更新</li>
+                </ul>
+              </div>
             </div>
           )}
         </div>
@@ -289,15 +349,26 @@ export default function EditorPage() {
 function ProcessingOverview({
   video,
   onStartProcessing,
-  onRetryStep
+  onRetryStep,
+  onGoToUpload,
+  expandedTranslation,
+  setExpandedTranslation,
+  expandedSynthesis,
+  setExpandedSynthesis
 }: {
   video: any
   onStartProcessing: (videoId: string) => void
   onRetryStep: (videoId: string, step: string) => void
+  onGoToUpload: (videoId: string) => void
+  expandedTranslation: boolean
+  setExpandedTranslation: (expanded: boolean) => void
+  expandedSynthesis: boolean
+  setExpandedSynthesis: (expanded: boolean) => void
 }) {
   const steps = [
     {
       id: 'download',
+      stepId: 'downloading',
       name: '视频下载',
       icon: Download,
       status: 'completed',
@@ -305,38 +376,35 @@ function ProcessingOverview({
     },
     {
       id: 'transcribe',
+      stepId: 'transcribing',
       name: '语音转写',
       icon: Volume2,
-      status: getStepStatus(video.status.stage, 'transcribing'),
+      status: getStepStatus(video.status.stage, 'transcribing', video),
       description: '提取音频并转写为中文字幕'
     },
     {
       id: 'translate',
+      stepId: 'translating',
       name: '内容翻译',
       icon: FileText,
-      status: getStepStatus(video.status.stage, 'translating'),
+      status: getStepStatus(video.status.stage, 'translating', video),
       description: '将中文字幕翻译为英文'
     },
     {
       id: 'synthesize',
+      stepId: 'synthesizing',
       name: '语音合成',
       icon: Play,
-      status: getStepStatus(video.status.stage, 'synthesizing'),
+      status: getStepStatus(video.status.stage, 'synthesizing', video),
       description: '根据英文字幕生成英文语音'
     },
     {
       id: 'edit',
+      stepId: 'editing',
       name: '视频编辑',
       icon: Edit,
-      status: getStepStatus(video.status.stage, 'editing'),
+      status: getStepStatus(video.status.stage, 'editing', video),
       description: '合成视频、字幕和音频'
-    },
-    {
-      id: 'upload',
-      name: '上传发布',
-      icon: Upload,
-      status: getStepStatus(video.status.stage, 'uploading'),
-      description: '准备上传到YouTube'
     }
   ]
 
@@ -364,6 +432,28 @@ function ProcessingOverview({
             <span>重新处理</span>
           </button>
         )}
+
+        {/* 处理中断时显示继续按钮 */}
+        {video.status.progress > 0 && video.status.progress < 100 && video.status.stage !== 'error' && (
+          <button
+            onClick={() => onStartProcessing(video.id)}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <Play className="w-4 h-4" />
+            <span>继续处理</span>
+          </button>
+        )}
+
+        {/* 视频处理完成后显示上传按钮 */}
+        {video.status.status === 'completed' && (
+          <button
+            onClick={() => onGoToUpload(video.id)}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <Upload className="w-4 h-4" />
+            <span>去上传</span>
+          </button>
+        )}
       </div>
 
       {/* 整体进度条 */}
@@ -386,59 +476,98 @@ function ProcessingOverview({
         {steps.map((step, index) => {
           const Icon = step.icon
           const isActive = step.status === 'processing'
+          const canExpand = step.stepId === 'translating' || step.stepId === 'synthesizing'
+          const isExpanded = step.stepId === 'translating' ? expandedTranslation :
+            step.stepId === 'synthesizing' ? expandedSynthesis : false
 
           return (
-            <div key={step.id} className={`flex items-center space-x-4 p-4 rounded-lg border ${isActive ? 'border-blue-200 bg-blue-50' : 'border-gray-200'
+            <div key={step.id} className={`rounded-lg border ${isActive ? 'border-blue-200 bg-blue-50' : 'border-gray-200'
               }`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${step.status === 'completed' ? 'bg-green-100 text-green-800' :
-                step.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                  step.status === 'pending' ? 'bg-gray-100 text-gray-500' :
-                    'bg-red-100 text-red-800'
-                }`}>
-                {step.status === 'completed' ? (
-                  <CheckCircle className="w-5 h-5" />
-                ) : step.status === 'processing' ? (
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                ) : step.status === 'error' ? (
-                  <AlertCircle className="w-5 h-5" />
-                ) : (
-                  <Icon className="w-5 h-5" />
-                )}
+              <div className="flex items-center space-x-4 p-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${step.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  step.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                    step.status === 'pending' ? 'bg-gray-100 text-gray-500' :
+                      'bg-red-100 text-red-800'
+                  }`}>
+                  {step.status === 'completed' ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : step.status === 'processing' ? (
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  ) : step.status === 'error' ? (
+                    <AlertCircle className="w-5 h-5" />
+                  ) : (
+                    <Icon className="w-5 h-5" />
+                  )}
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="font-medium text-gray-900">{step.name}</div>
+                      {canExpand && (
+                        <button
+                          onClick={() => {
+                            if (step.stepId === 'translating') {
+                              setExpandedTranslation(!expandedTranslation)
+                            } else if (step.stepId === 'synthesizing') {
+                              setExpandedSynthesis(!expandedSynthesis)
+                            }
+                          }}
+                          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                          title={isExpanded ? '收起' : '展开'}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    {(step.status === 'processing' || step.status === 'error') && step.stepId !== 'downloading' && (
+                      <button
+                        onClick={() => onRetryStep(video.id, step.stepId)}
+                        className="text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                        title={`重试 ${step.name}`}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>重试</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="text-sm text-gray-500 mt-1">
+                    {step.description}
+                  </div>
+
+                  <div className="text-sm mt-1">
+                    {step.status === 'completed' && (
+                      <span className="text-green-600">✓ 已完成</span>
+                    )}
+                    {step.status === 'processing' && (
+                      <span className="text-blue-600">⏳ 处理中...</span>
+                    )}
+                    {step.status === 'pending' && (
+                      <span className="text-gray-500">⏸ 等待中</span>
+                    )}
+                    {step.status === 'error' && (
+                      <span className="text-red-600">❌ 处理失败</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <div className="font-medium text-gray-900">{step.name}</div>
-                  {step.status === 'error' && (
-                    <button
-                      onClick={() => onRetryStep(video.id, step.id)}
-                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>重试</span>
-                    </button>
+              {/* 可展开的内容区域 */}
+              {canExpand && isExpanded && (
+                <div className="border-t border-gray-200 p-4 bg-gray-50">
+                  {step.stepId === 'translating' && (
+                    <SubtitleEditor video={video} />
+                  )}
+                  {step.stepId === 'synthesizing' && (
+                    <VoiceSettings video={video} />
                   )}
                 </div>
-
-                <div className="text-sm text-gray-500 mt-1">
-                  {step.description}
-                </div>
-
-                <div className="text-sm mt-1">
-                  {step.status === 'completed' && (
-                    <span className="text-green-600">✓ 已完成</span>
-                  )}
-                  {step.status === 'processing' && (
-                    <span className="text-blue-600">⏳ 处理中...</span>
-                  )}
-                  {step.status === 'pending' && (
-                    <span className="text-gray-500">⏸ 等待中</span>
-                  )}
-                  {step.status === 'error' && (
-                    <span className="text-red-600">❌ 处理失败</span>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           )
         })}
@@ -465,28 +594,25 @@ function ProcessingOverview({
   )
 }
 
-// 组件：字幕编辑器
-function SubtitleEditor({ video }: { video: any }) {
-  const [subtitles, setSubtitles] = useState([
-    { id: 1, start: 0, end: 3, original: '大家好，欢迎来到我的频道', translation: 'Hello everyone, welcome to my channel' },
-    { id: 2, start: 3, end: 6, original: '今天我们来分享一个有趣的内容', translation: 'Today we are going to share some interesting content' },
-    { id: 3, start: 6, end: 9, original: '希望大家能够喜欢', translation: 'Hope you all like it' }
-  ])
-
-  const [editingId, setEditingId] = useState<number | null>(null)
+// 组件：字幕编辑器（简化版）
+function SubtitleEditor({ video }: { video: VideoMeta }) {
+  const [subtitles, setSubtitles] = useState(video.segments || [])
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
+  const { updateTranslation } = useVideoStore()
 
-  const handleEdit = (id: number, text: string) => {
+  const handleEdit = (id: string, text: string) => {
     setEditingId(id)
     setEditText(text)
   }
 
-  const handleSave = (id: number) => {
+  const handleSave = (id: string) => {
     setSubtitles(prev => prev.map(sub =>
       sub.id === id ? { ...sub, translation: editText } : sub
     ))
     setEditingId(null)
     setEditText('')
+    updateTranslation(video.id, id, editText)
   }
 
   const handleCancel = () => {
@@ -494,103 +620,102 @@ function SubtitleEditor({ video }: { video: any }) {
     setEditText('')
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">字幕编辑</h3>
-
-        <div className="flex items-center space-x-2">
-          <button className="btn-secondary flex items-center space-x-2">
-            <Download className="w-4 h-4" />
-            <span>导出字幕</span>
-          </button>
-          <button className="btn-primary flex items-center space-x-2">
-            <Save className="w-4 h-4" />
-            <span>保存修改</span>
-          </button>
+  if (video.status.stage === 'idle' || video.status.stage === 'transcribing') {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <div className="flex items-center">
+          <Clock className="w-4 h-4 text-yellow-600 mr-2" />
+          <p className="text-sm text-yellow-800">
+            字幕内容将在语音转写完成后显示
+          </p>
         </div>
       </div>
+    )
+  }
 
-      {video.status.stage === 'idle' || video.status.stage === 'transcribing' ? (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <Clock className="w-5 h-5 text-yellow-600 mr-2" />
-            <p className="text-yellow-800">
-              字幕内容将在语音转写完成后显示
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {subtitles.map((subtitle) => (
-            <div key={subtitle.id} className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-500 font-mono">
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-gray-900">字幕编辑</h4>
+      </div>
+
+      <div className="max-h-60 overflow-y-auto space-y-2">
+        {subtitles.slice(0, 5).map((subtitle) => {
+          const translation = video.translation?.find(t => t.id === subtitle.id)
+          return (
+            <div key={subtitle.id} className="border border-gray-200 rounded p-3 text-sm">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-500 font-mono">
                   {formatTime(subtitle.start)} → {formatTime(subtitle.end)}
                 </span>
                 {editingId !== subtitle.id && (
                   <button
-                    onClick={() => handleEdit(subtitle.id, subtitle.translation)}
-                    className="text-sm text-blue-600 hover:text-blue-700"
+                    onClick={() => handleEdit(subtitle.id, translation?.translatedText || '')}
+                    className="text-xs text-blue-600 hover:text-blue-700"
                   >
                     编辑
                   </button>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <div className="text-gray-700">
-                  <span className="text-xs text-gray-500 uppercase tracking-wide">原文:</span>
-                  <p className="mt-1">{subtitle.original}</p>
+              <div className="space-y-1">
+                <div className="text-gray-600">
+                  <span className="text-xs text-gray-400">原文:</span>
+                  <p className="text-xs">{subtitle.text}</p>
                 </div>
 
-                <div className="text-gray-700">
-                  <span className="text-xs text-gray-500 uppercase tracking-wide">译文:</span>
+                <div className="text-gray-600">
+                  <span className="text-xs text-gray-400">译文:</span>
                   {editingId === subtitle.id ? (
-                    <div className="mt-1">
+                    <div>
                       <textarea
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-md resize-none"
-                        rows={2}
+                        className="w-full text-xs p-1 border border-gray-300 rounded resize-none"
+                        rows={1}
                       />
-                      <div className="flex items-center space-x-2 mt-2">
+                      <div className="flex items-center space-x-1 mt-1">
                         <button
                           onClick={() => handleSave(subtitle.id)}
-                          className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                          className="text-xs bg-blue-600 text-white px-2 py-1 rounded"
                         >
                           保存
                         </button>
                         <button
                           onClick={handleCancel}
-                          className="text-sm bg-gray-300 text-gray-700 px-3 py-1 rounded hover:bg-gray-400"
+                          className="text-xs bg-gray-300 text-gray-700 px-2 py-1 rounded"
                         >
                           取消
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-1">{subtitle.translation}</p>
+                    <p className="text-xs">{translation?.translatedText}</p>
                   )}
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          )
+        })}
+        {subtitles.length > 5 && (
+          <div className="text-center text-xs text-gray-500 py-2">
+            还有 {subtitles.length - 5} 条字幕...
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-// 组件：处理设置
-function ProcessingSettings({ video }: { video: any }) {
+// 组件：语音设置
+function VoiceSettings({ video }: { video: any }) {
   const [settings, setSettings] = useState({
-    targetLanguage: 'en',
-    voiceType: 'female',
-    voiceModel: 'elevenlabs',
-    subtitleStyle: 'bilingual',
-    videoQuality: 'hd',
-    enableFilters: false
+    provider: 'edge-tts',
+    voiceType: 'male',
+    voice: '',
+    speed: 1.0,
+    pitch: 0,
+    outputFormat: 'mp3'
   })
 
   const handleSettingChange = (key: string, value: any) => {
@@ -599,150 +724,102 @@ function ProcessingSettings({ video }: { video: any }) {
 
   const handleSaveSettings = () => {
     // 这里可以调用API保存设置
-    console.log('Saving settings:', settings)
+    console.log('Saving voice settings:', settings)
+    toast.success('语音设置已保存')
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">处理设置</h3>
+        <h4 className="font-medium text-gray-900">语音设置</h4>
         <button
           onClick={handleSaveSettings}
-          className="btn-primary flex items-center space-x-2"
+          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
         >
-          <Save className="w-4 h-4" />
-          <span>保存设置</span>
+          保存设置
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* 翻译设置 */}
-        <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">翻译设置</h4>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              目标语言
-            </label>
-            <select
-              value={settings.targetLanguage}
-              onChange={(e) => handleSettingChange('targetLanguage', e.target.value)}
-              className="input"
-            >
-              <option value="en">英语</option>
-              <option value="ja">日语</option>
-              <option value="ko">韩语</option>
-              <option value="es">西班牙语</option>
-              <option value="fr">法语</option>
-            </select>
-          </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            语音引擎
+          </label>
+          <select
+            value={settings.provider}
+            onChange={(e) => handleSettingChange('provider', e.target.value)}
+            className="w-full text-xs p-1 border border-gray-300 rounded"
+          >
+            <option value="edge-tts">Edge TTS (免费)</option>
+            <option value="elevenlabs">ElevenLabs (需API Key)</option>
+          </select>
         </div>
 
-        {/* 语音设置 */}
-        <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">语音设置</h4>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              语音模型
-            </label>
-            <select
-              value={settings.voiceModel}
-              onChange={(e) => handleSettingChange('voiceModel', e.target.value)}
-              className="input"
-            >
-              <option value="elevenlabs">ElevenLabs</option>
-              <option value="openai">OpenAI TTS</option>
-              <option value="edge">Edge TTS</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              语音类型
-            </label>
-            <select
-              value={settings.voiceType}
-              onChange={(e) => handleSettingChange('voiceType', e.target.value)}
-              className="input"
-            >
-              <option value="female">女声</option>
-              <option value="male">男声</option>
-            </select>
-          </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            语音类型
+          </label>
+          <select
+            value={settings.voiceType}
+            onChange={(e) => handleSettingChange('voiceType', e.target.value)}
+            className="w-full text-xs p-1 border border-gray-300 rounded"
+          >
+            <option value="male">男声</option>
+            <option value="female">女声</option>
+          </select>
         </div>
 
-        {/* 字幕设置 */}
-        <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">字幕设置</h4>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              字幕样式
-            </label>
-            <select
-              value={settings.subtitleStyle}
-              onChange={(e) => handleSettingChange('subtitleStyle', e.target.value)}
-              className="input"
-            >
-              <option value="bilingual">双语字幕</option>
-              <option value="target-only">仅目标语言</option>
-              <option value="original-only">仅原语言</option>
-              <option value="none">无字幕</option>
-            </select>
-          </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            语速
+          </label>
+          <select
+            value={settings.speed}
+            onChange={(e) => handleSettingChange('speed', parseFloat(e.target.value))}
+            className="w-full text-xs p-1 border border-gray-300 rounded"
+          >
+            <option value={0.8}>慢 (0.8x)</option>
+            <option value={1.0}>正常 (1.0x)</option>
+            <option value={1.2}>快 (1.2x)</option>
+            <option value={1.5}>很快 (1.5x)</option>
+          </select>
         </div>
 
-        {/* 视频设置 */}
-        <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">视频设置</h4>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              输出质量
-            </label>
-            <select
-              value={settings.videoQuality}
-              onChange={(e) => handleSettingChange('videoQuality', e.target.value)}
-              className="input"
-            >
-              <option value="hd">高清 (1080p)</option>
-              <option value="standard">标清 (720p)</option>
-              <option value="low">低画质 (480p)</option>
-            </select>
-          </div>
-
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="enableFilters"
-              checked={settings.enableFilters}
-              onChange={(e) => handleSettingChange('enableFilters', e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="enableFilters" className="ml-2 block text-sm text-gray-900">
-              启用视频滤镜优化
-            </label>
-          </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            输出格式
+          </label>
+          <select
+            value={settings.outputFormat}
+            onChange={(e) => handleSettingChange('outputFormat', e.target.value)}
+            className="w-full text-xs p-1 border border-gray-300 rounded"
+          >
+            <option value="mp3">MP3</option>
+            <option value="wav">WAV</option>
+          </select>
         </div>
       </div>
 
-      {/* 设置预览 */}
-      <div className="border-t pt-6">
-        <h4 className="font-medium text-gray-900 mb-3">当前设置预览</h4>
-        <div className="bg-gray-50 rounded-lg p-4">
-          <div className="text-sm space-y-1">
-            <div>目标语言: {getLanguageName(settings.targetLanguage)}</div>
-            <div>语音模型: {settings.voiceModel}</div>
-            <div>语音类型: {settings.voiceType === 'female' ? '女声' : '男声'}</div>
-            <div>字幕样式: {getSubtitleStyleName(settings.subtitleStyle)}</div>
-            <div>视频质量: {getQualityName(settings.videoQuality)}</div>
-          </div>
+      {settings.provider === 'elevenlabs' && (
+        <div className="bg-blue-50 border border-blue-200 rounded p-3">
+          <p className="text-xs text-blue-800">
+            💡 ElevenLabs 提供更自然的语音，但需要在环境变量中配置 ELEVENLABS_API_KEY
+          </p>
         </div>
-      </div>
+      )}
+
+      {settings.provider === 'edge-tts' && (
+        <div className="bg-green-50 border border-green-200 rounded p-3">
+          <p className="text-xs text-green-800">
+            ✅ Edge TTS 完全免费，无需API密钥，支持多种高质量语音
+          </p>
+        </div>
+      )}
     </div>
   )
 }
+
+
 
 // 辅助函数
 function formatDuration(seconds: number) {
@@ -765,20 +842,33 @@ function getStatusText(stage: string) {
     'translating': '翻译中',
     'synthesizing': '合成中',
     'editing': '编辑中',
-    'uploading': '上传中',
     'completed': '已完成',
     'error': '出错'
   }
   return stageMap[stage as keyof typeof stageMap] || stage
 }
 
-function getStepStatus(currentStage: string, stepStage: string) {
-  const stages = ['idle', 'transcribing', 'translating', 'synthesizing', 'editing', 'uploading', 'completed']
+function getStepStatus(currentStage: string, stepStage: string, video?: any) {
+  const stages = ['idle', 'transcribing', 'translating', 'synthesizing', 'editing', 'completed']
   const currentIndex = stages.indexOf(currentStage)
   const stepIndex = stages.indexOf(stepStage)
-
-  if (currentStage === 'error') {
-    return stepIndex < currentIndex ? 'completed' : 'error'
+  const process = video?.status?.progress
+  const stage = video?.status?.stage
+  // 特殊处理错误状态
+  if (process > 0 && process !== 100) {
+    const isError = stage === 'error'
+    const isTranscribing = process < 40
+    const isTranslating = process >= 40 && process < 60
+    const isSynthesizing = process >= 60 && process < 80
+    const isEditing = process >= 80 && process < 100
+    // 如果没有明确的失败步骤信息，根据进度判断
+    if (process > 0) {
+      if (stepStage === 'transcribing') return process >= 40 ? 'completed' : 'error'
+      if (stepStage === 'translating') return process >= 60 ? 'completed' : (isTranslating && isError) ? 'error' : 'pending'
+      if (stepStage === 'synthesizing') return process >= 80 ? 'completed' : (isSynthesizing && isError) ? 'error' : 'pending'
+      if (stepStage === 'editing') return process >= 100 ? 'completed' : (isEditing && isError) ? 'error' : 'pending'
+    }
+    return stepIndex <= currentIndex ? 'error' : 'pending'
   }
 
   if (currentIndex === -1) return 'pending'

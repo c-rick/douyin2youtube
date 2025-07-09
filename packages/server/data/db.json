@@ -1,37 +1,90 @@
 {
   "crawlingTasks": [
     {
-      "id": "task_1751530776224",
-      "url": "https://www.douyin.com/video/7521697944496590114",
+      "url": "https://www.douyin.com/video/7110422749088156943",
+      "type": "crawling",
       "status": "completed",
       "progress": 100,
-      "message": "爬取完成",
-      "startTime": "2025-07-03T08:19:36.248Z",
-      "endTime": "2025-07-03T08:19:39.314Z",
-      "videoId": "20250703_u93py08x"
+      "message": "任务完成",
+      "startTime": "2025-07-08T07:58:00.897Z",
+      "id": "task_1751961480897_ymb5lsrap",
+      "createdAt": "2025-07-08T07:58:00.897Z",
+      "updatedAt": "2025-07-08T07:58:04.138Z",
+      "error": "",
+      "endTime": "2025-07-08T07:58:04.136Z",
+      "videoId": "20250708_nsyxfrnr"
     },
     {
-      "id": "task_1751533403836",
-      "url": "https://www.douyin.com/video/7521261448710950144",
+      "url": "https://www.douyin.com/video/7110422749088156943",
+      "type": "crawling",
       "status": "completed",
       "progress": 100,
-      "message": "爬取完成",
-      "startTime": "2025-07-03T09:03:23.914Z",
-      "endTime": "2025-07-03T09:03:43.397Z",
-      "videoId": "20250703_6ha9umxj"
+      "message": "任务完成",
+      "startTime": "2025-07-08T08:25:21.751Z",
+      "id": "task_1751963121751_h0z6shb3k",
+      "createdAt": "2025-07-08T08:25:21.751Z",
+      "updatedAt": "2025-07-08T08:25:25.923Z",
+      "error": "",
+      "endTime": "2025-07-08T08:25:25.923Z",
+      "videoId": "20250708_z668h2dt"
     },
     {
-      "id": "task_1751613240743",
-      "url": "https://www.douyin.com/video/7521256553090010408",
+      "url": "https://www.douyin.com/video/7110422749088156943",
+      "type": "crawling",
       "status": "completed",
       "progress": 100,
-      "message": "爬取完成",
-      "startTime": "2025-07-04T07:14:00.764Z",
-      "endTime": "2025-07-04T07:14:32.536Z",
-      "videoId": "20250704_0q08v97q"
+      "message": "任务完成",
+      "startTime": "2025-07-08T08:41:26.479Z",
+      "id": "task_1751964086479_qp301avab",
+      "createdAt": "2025-07-08T08:41:26.479Z",
+      "updatedAt": "2025-07-08T08:41:29.499Z",
+      "error": "",
+      "endTime": "2025-07-08T08:41:29.498Z",
+      "videoId": "20250708_6pi59525"
+    },
+    {
+      "url": "https://www.douyin.com/video/7110422749088156943",
+      "type": "crawling",
+      "status": "completed",
+      "progress": 100,
+      "message": "任务完成",
+      "startTime": "2025-07-08T09:34:46.744Z",
+      "id": "task_1751967286745_32fhjeno8",
+      "createdAt": "2025-07-08T09:34:46.745Z",
+      "updatedAt": "2025-07-08T09:34:51.120Z",
+      "error": "",
+      "endTime": "2025-07-08T09:34:51.119Z",
+      "videoId": "20250708_qfl7q0do"
     }
   ],
   "videos": [],
-  "processingTasks": [],
+  "processingTasks": [
+    {
+      "videoId": "20250708_6pi59525",
+      "type": "processing",
+      "status": "completed",
+      "progress": 100,
+      "data": {},
+      "id": "task_1751964558913_bi1zpzg3w",
+      "createdAt": "2025-07-08T08:49:18.913Z",
+      "updatedAt": "2025-07-08T09:13:58.421Z",
+      "message": "正在处理视频...",
+      "error": ""
+    },
+    {
+      "videoId": "20250708_qfl7q0do",
+      "type": "processing",
+      "status": "failed",
+      "progress": 60,
+      "data": {
+        "retryFromStep": null
+      },
+      "id": "task_1751968397419_3wg8v5509",
+      "createdAt": "2025-07-08T09:53:17.419Z",
+      "updatedAt": "2025-07-09T09:54:44.802Z",
+      "message": "正在处理视频...",
+      "error": "pending"
+    }
+  ],
   "uploadingTasks": []
 }

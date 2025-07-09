@@ -2,12 +2,15 @@ import low from 'lowdb'
 import FileSync from 'lowdb/adapters/FileSync'
 import path from 'path'
 import { logger } from '../utils/logger'
-import { CrawlingTask, VideoMetadata, VideoProcessingTask } from '../types'
-import { taskType } from './taskService'
+import { CrawlingTask, UploadingTask, VideoMetadata, VideoProcessingTask } from '../types'
+import { Task, taskType } from './queueService'
+
 
 // 数据库结构
 interface DatabaseSchema {
   crawlingTasks: CrawlingTask[]
+  processingTasks: VideoProcessingTask[]
+  uploadingTasks: VideoProcessingTask[]
   videos: VideoMetadata[]
 }
 
@@ -34,7 +37,7 @@ class DatabaseService {
   }
 
   // 任务相关方法
-  async addTask(task: CrawlingTask | VideoProcessingTask): Promise<void> {
+  async addTask(task: Task): Promise<void> {
     try {
       const taskTypeKey = task.type + 'Tasks'
       this.db.get(taskTypeKey)
@@ -47,7 +50,7 @@ class DatabaseService {
     }
   }
 
-  async getTask(taskId: string, type: taskType): Promise<CrawlingTask | VideoProcessingTask | undefined> {
+  async getTask(taskId: string, type: taskType): Promise<Task | undefined> {
     try {
       return this.db.get(type + 'Tasks')
         .find({ id: taskId })
@@ -58,7 +61,18 @@ class DatabaseService {
     }
   }
 
-  async updateTask(taskId: string, type: taskType, updates: Partial<CrawlingTask | VideoProcessingTask>): Promise<boolean> {
+  async getTaskByVideoId(videoId: string, type: taskType): Promise<Task | undefined> {
+    try {
+      return this.db.get(type + 'Tasks')
+        .find({ videoId: videoId })
+        .value()
+    } catch (error) {
+      logger.error(`Failed to get task by videoId ${videoId}:`, error)
+      throw error
+    }
+  }
+
+  async updateTask(taskId: string, type: taskType, updates: Partial<Task>): Promise<boolean> {
     try {
       const task = this.db.get(type + 'Tasks')
         .find({ id: taskId })
@@ -98,7 +112,7 @@ class DatabaseService {
   async getAllTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
     try {
       return this.db.get(type + 'Tasks')
-        .orderBy(['startTime'], ['desc'])
+        .orderBy(['createdAt'], ['desc'])
         .value()
     } catch (error) {
       logger.error('Failed to get all tasks:', error)
@@ -109,7 +123,7 @@ class DatabaseService {
   async getActiveTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
     try {
       return this.db.get(type + 'Tasks')
-        .filter(task => task.status === 'pending' || task.status === 'running')
+        .filter((task: any) => task.status === 'pending' || task.status === 'running')
         .orderBy(['startTime'], ['asc'])
         .value()
     } catch (error) {
@@ -182,7 +196,7 @@ class DatabaseService {
         const initialLength = this.db.get(type + 'Tasks').size().value()
 
         this.db.get(type + 'Tasks')
-          .remove(task => {
+          .remove((task: any) => {
             const taskDate = new Date(task.startTime)
             return now.getTime() - taskDate.getTime() > maxAge &&
               (task.status === 'completed' || task.status === 'failed')

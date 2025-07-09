@@ -6,8 +6,8 @@ export async function requestLogger(ctx: Context, next: Next) {
 
   // 记录请求开始
   logger.info(`→ ${ctx.method} ${ctx.path}`, {
-    query: ctx.query,
-    userAgent: ctx.headers['user-agent'],
+    // query: ctx.query,
+    // userAgent: ctx.headers['user-agent'],
     ip: ctx.ip
   })
 

@@ -3,6 +3,8 @@ import path from 'path'
 import { logger } from '../utils/logger'
 import { VideoStatus, StorageManager } from '../types'
 import { TranscriptionResult } from '../transcriber/types'
+import { TranslatedSegment, TranslationResult } from '../translator/types'
+import { VideoMeta } from '../shared/types'
 
 export class FileStorageService implements StorageManager {
   private readonly downloadsDir: string
@@ -29,23 +31,30 @@ export class FileStorageService implements StorageManager {
     }
   }
 
-  async getVideoList(): Promise<any[]> {
+  async getVideoList(): Promise<VideoMeta[]> {
     try {
       const content = await fs.readFile(this.metaFile, 'utf-8')
       const data = JSON.parse(content)
-      return data.videos || []
+      return (data.videos || []).sort((a: VideoMeta, b: VideoMeta) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     } catch (error) {
       logger.error('Failed to read video list:', error)
       return []
     }
   }
 
-  async getVideoById(id: string): Promise<any | null> {
+  async getVideoById(id: string): Promise<VideoMeta | null> {
     const videos = await this.getVideoList()
-    return videos.find(video => video.id === id) || null
+    const video = videos.find(video => video.id === id)
+    const segments = await this.getTranscriptionResult(id)
+    const translation = await this.getTranslationResult(id)
+    return {
+      ...video,
+      segments: segments?.segments || [],
+      translation: translation?.segments || [],
+    } as VideoMeta
   }
 
-  async saveVideoMeta(video: any): Promise<void> {
+  async saveVideoMeta(video: VideoMeta): Promise<void> {
     try {
       const videos = await this.getVideoList()
       const existingIndex = videos.findIndex(v => v.id === video.id)
@@ -76,6 +85,7 @@ export class FileStorageService implements StorageManager {
 
       let currentStatus: VideoStatus = {
         id,
+        status: 'pending',
         stage: 'idle',
         progress: 0,
         message: ''
@@ -149,6 +159,53 @@ export class FileStorageService implements StorageManager {
       return JSON.parse(content)
     } catch {
       return null
+    }
+  }
+
+  // 保存翻译结果
+  async saveTranslationResult(videoId: string, result: TranslationResult): Promise<void> {
+    try {
+      const videoDir = this.getVideoDirectory(videoId)
+      const translationFile = path.join(videoDir, 'translation.json')
+
+      await fs.writeFile(translationFile, JSON.stringify(result, null, 2))
+      logger.debug(`Translation result saved for video: ${videoId}`)
+    } catch (error) {
+      logger.error(`Failed to save translation result for video ${videoId}:`, error)
+      throw error
+    }
+  }
+
+  // 获取翻译结果
+  async getTranslationResult(videoId: string): Promise<TranslationResult | null> {
+    try {
+      const videoDir = this.getVideoDirectory(videoId)
+      const translationFile = path.join(videoDir, 'translation.json')
+
+      const content = await fs.readFile(translationFile, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      return null
+    }
+  }
+
+  async updateTranslation(videoId: string, subtitleId: number, translation: string): Promise<void> {
+    try {
+      const videoDir = this.getVideoDirectory(videoId)
+
+      const translationFile = path.join(videoDir, 'translation.json')
+      const content = await fs.readFile(translationFile, 'utf-8')
+      const data = JSON.parse(content)
+      data.segments.map((segment: TranslatedSegment) => {
+        console.log(segment.id === +subtitleId)
+        if (segment.id === +subtitleId) {
+          segment.translatedText = translation
+        }
+      })
+      await fs.writeFile(translationFile, JSON.stringify(data, null, 2))
+    } catch (error) {
+      logger.error(`Failed to update translation for video ${videoId}:`, error)
+      throw error
     }
   }
 }

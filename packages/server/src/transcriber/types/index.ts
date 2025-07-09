@@ -24,8 +24,5 @@ export interface TranscriptionSegment {
   noSpeechProb: number;
 }
 
-export type TranscriptionProgress = {
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  progress: number;
-  error?: string;
-} 
+// 使用共享的进度类型
+export type { TranscriptionProgress } from '../../shared/types' 
