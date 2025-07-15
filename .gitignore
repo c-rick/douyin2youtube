@@ -53,3 +53,6 @@ venv.bak/
 
 # History
 .history/ 
+
+# data
+packages/server/data

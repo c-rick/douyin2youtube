@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/6ea4de74-d581-4ca7-bdc6-974af8c659b1
 npm install -g pnpm
 
 # 克隆项目
-git clone <repository-url>
+git clone git@github.com:c-rick/douyin2youtube.git
 cd douyin2youtube
 
 # 初始化子模块
