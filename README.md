@@ -8,7 +8,9 @@
 
 ## 1. 用例（Usecase）
 
-![用例演示](https://aiccplayground.online/usecase.gif)
+
+https://github.com/user-attachments/assets/01cc8b9a-e89e-4c94-8467-79c4684889e0
+
 
 
 ## 2. 快速开始（Quick Start）
