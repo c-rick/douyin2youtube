@@ -10,6 +10,11 @@ export default defineConfig({
   minify: false,
   target: 'node18',
   outDir: 'dist',
-  noExternal: ['koa', 'koa-router', 'koa-bodyparser', '@koa/cors'],
-  tsconfig: './tsconfig.build.json'
+  // 更新为Express相关的依赖
+  noExternal: ['express', 'cors'],
+  tsconfig: './tsconfig.build.json',
+  // 开发环境配置
+  env: {
+    NODE_ENV: process.env.NODE_ENV || 'development'
+  }
 }) 

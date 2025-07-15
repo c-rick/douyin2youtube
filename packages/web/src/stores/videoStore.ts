@@ -1,66 +1,31 @@
 import { create } from 'zustand'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+export const API_BASE_URL = process.env.SERVER_URL
 
+// 简化的VideoMeta类型（与后端一致）
 export interface VideoMeta {
   id: string
   title: string
-  desc?: string
+  titleEn?: string
+  description?: string
+  descriptionEn?: string
   author: string
   coverUrl: string
   videoUrl: string
   duration: number
-  createTime?: string
-  downloadTime: string
+  shareUrl: string
+  createdAt: string
   status: ProcessingStatus
-  localPaths?: {
-    video?: string
-    cover?: string
-    meta?: string
-    directory?: string
-  }
-  remotePaths?: {
-    video?: string
-    cover?: string
-    meta?: string
-    directory?: string
-  }
-  segments?: Subtitle[]
-  translation?: Translation[]
+  localPath?: string
+  youtubeId?: string
+  tags?: string[]
 }
 
 export interface ProcessingStatus {
-  stage: 'idle' | 'downloading' | 'transcribing' | 'translating' | 'synthesizing' | 'editing' | 'uploading' | 'completed' | 'error'
+  stage: 'idle' | 'downloading' | 'translating' | 'uploading' | 'completed' | 'error'
   progress: number
-  message: string
+  message?: string
   error?: string
-}
-
-export interface CrawlingTask {
-  id?: string
-  url: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  progress: number
-  message: string
-  error?: string
-  startTime: string
-  endTime?: string
-  videoId?: string
-}
-
-export interface Subtitle {
-  id: string
-  start: number
-  end: number
-  text: string
-}
-
-export interface Translation {
-  id: string
-  start: number
-  end: number
-  originalText: string
-  translatedText: string
 }
 
 interface VideoStore {
@@ -68,158 +33,62 @@ interface VideoStore {
   videos: VideoMeta[]
   currentVideo: VideoMeta | null
   isLoading: boolean
-  crawlingTasks: CrawlingTask[]
 
-  // 操作
+  // 基础操作
   setVideos: (videos: VideoMeta[]) => void
   addVideo: (video: VideoMeta) => void
   updateVideo: (id: string, updates: Partial<VideoMeta>) => void
-  updateTranslation: (videoId: string, subtitleId: string, translation: string) => void
   setCurrentVideo: (video: VideoMeta | null) => void
   setLoading: (loading: boolean) => void
 
-  // 任务管理
-  addCrawlingTask: (task: CrawlingTask) => void
-  updateCrawlingTask: (id: string, updates: Partial<CrawlingTask>) => void
-  updateProcessingTask: (id: string, updates: Partial<ProcessingStatus>) => void
-  removeCrawlingTask: (id: string) => void
-  setCrawlingTasks: (tasks: CrawlingTask[]) => void
-  fetchCrawlingTasks: () => Promise<void>
-
   // API 调用
   fetchVideos: () => Promise<VideoMeta[]>
-  fetchVideoStatus: (videoId: string) => Promise<void>
-  startCrawling: (url: string) => Promise<void>
-  startProcessing: (videoId: string) => Promise<void>
-  retryStep: (videoId: string, step: string) => Promise<void>
-  uploadToYouTube: (videoId: string, metadata: { title: string, description: string, tags: string[] }) => Promise<void>
+  fetchSingleVideo: (videoId: string) => Promise<VideoMeta | null>
+  downloadVideo: (url: string) => Promise<VideoMeta>
+  uploadToYouTube: (videoId: string, uploadData: {
+    title?: string
+    description?: string
+    tags?: string[]
+    privacy?: 'public' | 'private' | 'unlisted'
+  }) => Promise<{ youtubeId: string, youtubeUrl: string }>
+  retryTranslate: (video: VideoMeta) => Promise<void>
+  // YouTube 授权
+  checkIsAuth: () => Promise<boolean>
+  deleteVideo: (videoId: string) => Promise<boolean>
 
-  // 轮询
-  pollCrawlerTaskStatus: (taskId: string) => Promise<void>
-
-  apiBaseUrl: string
 }
-
-let pollingInterval: NodeJS.Timeout | null = null
 
 export const useVideoStore = create<VideoStore>((set, get) => ({
   // 初始状态
   videos: [],
   currentVideo: null,
   isLoading: false,
-  crawlingTasks: [],
-  apiBaseUrl: API_BASE_URL,
 
   // 基础操作
   setVideos: (videos) => set({ videos }),
 
   addVideo: (video) => set((state) => ({
-    videos: [...state.videos, video]
+    videos: [video, ...state.videos]
   })),
 
   updateVideo: (id, updates) => set((state) => ({
     videos: state.videos.map(video =>
       video.id === id ? { ...video, ...updates } : video
     ),
-    currentVideo: state.currentVideo?.id === id ? { ...state.currentVideo, ...updates } : state.currentVideo
+    currentVideo: state.currentVideo?.id === id
+      ? { ...state.currentVideo, ...updates }
+      : state.currentVideo
   })),
 
-  setCurrentVideo: (video) => {
-    if (video && (video.id === get().currentVideo?.id)) {
-      return
-    }
-    set({ currentVideo: video })
-  },
+  setCurrentVideo: (video) => set({ currentVideo: video }),
 
   setLoading: (loading) => set({ isLoading: loading }),
-
-  // 任务管理
-  setCrawlingTasks: (tasks) => set({ crawlingTasks: tasks }),
-
-  addCrawlingTask: (task) => set((state) => ({
-    crawlingTasks: [task, ...state.crawlingTasks]
-  })),
-
-  updateCrawlingTask: (id, updates) => set((state) => ({
-    crawlingTasks: state.crawlingTasks.map(task =>
-      task.id === id ? { ...task, ...updates } : task
-    )
-  })),
-
-  updateProcessingTask: (id, updates) => set((state) => ({
-    videos: state.videos.map(video =>
-      video.id === id ? { ...video, ...updates } : video
-    )
-  })),
-
-  removeCrawlingTask: async (id: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/crawler/tasks/${id}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '删除任务失败')
-      }
-
-      // 从本地状态中移除任务
-      set((state) => ({
-        crawlingTasks: state.crawlingTasks.filter(task => task.id !== id)
-      }))
-    } catch (error) {
-      console.error('Failed to remove crawling task:', error)
-      throw error
-    }
-  },
-
-  // 获取持久化的任务列表
-  fetchCrawlingTasks: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/crawler/tasks`)
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-
-      if (result.success && Array.isArray(result.data?.tasks)) {
-        // 更新任务列表，但保留正在进行的任务
-        const currentTasks = get().crawlingTasks.filter(
-          task => task.status === 'pending' || task.status === 'running'
-        )
-
-        // 合并服务器返回的任务和正在进行的任务
-        const serverTasks = result.data.tasks as CrawlingTask[]
-        const mergedTasks = [...currentTasks]
-
-        // 添加服务器返回的任务，避免重复
-        serverTasks.forEach(serverTask => {
-          if (!mergedTasks.some(task => task.id === serverTask.id)) {
-            mergedTasks.push(serverTask)
-          }
-        })
-
-        // 按开始时间降序排序
-        mergedTasks.sort((a, b) =>
-          new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-        )
-
-        set({ crawlingTasks: mergedTasks })
-      } else {
-        console.error('API response format error:', result)
-      }
-    } catch (error) {
-      console.error('Failed to fetch crawling tasks:', error)
-    }
-  },
 
   // API 调用
   fetchVideos: async () => {
     try {
       set({ isLoading: true })
-      const response = await fetch(`${API_BASE_URL}/api/crawler/list`)
+      const response = await fetch(`${API_BASE_URL}/api/videos`)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -227,25 +96,19 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
 
       const result = await response.json()
 
-      if (result.success && result.data?.videos) {
-        set({ videos: result.data.videos })
-      } else {
-        console.error('API response format error:', result)
-        set({ videos: [] })
-      }
-      return result.data.videos
+      set({ videos: result.data })
+      return result.data
     } catch (error) {
       console.error('Failed to fetch videos:', error)
-      set({ videos: [] })
+      throw error
     } finally {
       set({ isLoading: false })
     }
   },
 
-  // 获取单个视频状态
-  fetchVideoStatus: async (videoId: string) => {
+  fetchSingleVideo: async (videoId: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/video/${videoId}`)
+      const response = await fetch(`${API_BASE_URL}/api/videos/${videoId}`)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -253,148 +116,83 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
 
       const result = await response.json()
 
-      if (result.success && result.data) {
-        // 更新对应的视频状态
-        const videoData = result.data.video
-        const statusData = result.data.status
-
-        if (videoData && statusData) {
-          get().updateVideo(videoId, {
-            ...videoData,
-            status: statusData
-          })
-        }
+      if (result.success) {
+        const video = result.data as VideoMeta
+        // 更新视频列表中的对应视频
+        get().updateVideo(videoId, video)
+        return video
       } else {
-        console.error('API response format error:', result)
+        return null
       }
     } catch (error) {
-      console.error('Failed to fetch video status:', error)
+      console.error('Failed to fetch single video:', error)
+      throw error
     }
   },
 
-  startCrawling: async (url: string) => {
+  downloadVideo: async (url: string) => {
     try {
       set({ isLoading: true })
-      const tmpTaskId = `task_${Date.now()}`
-      const newTask: CrawlingTask = {
-        id: tmpTaskId,
-        url,
-        status: 'pending',
-        progress: 0,
-        message: '正在启动爬取任务...',
-        startTime: new Date().toISOString()
-      }
-
-      get().addCrawlingTask(newTask)
-
-
-      const response = await fetch(`${API_BASE_URL}/api/crawler/start`, {
+      const response = await fetch(`${API_BASE_URL}/api/download`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ url })
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Download failed')
       }
 
       const result = await response.json()
-      const taskId = result.data.taskId
-      if (result.success) {
-        // 更新任务状态为运行中
-        get().updateCrawlingTask(tmpTaskId, {
-          id: taskId,
-          status: 'running',
-          message: '正在解析视频链接...',
-          videoId: result.data?.videoId
-        })
 
-        // 开始轮询任务状态
-        get().pollCrawlerTaskStatus(taskId)
+      if (result.success) {
+        const video = result.data as VideoMeta
+        get().addVideo(video)
+        return video
       } else {
-        // 更新任务状态为失败
-        get().updateCrawlingTask(taskId, {
-          status: 'failed',
-          message: result.message || '爬取任务启动失败',
-          error: result.message || '未知错误',
-          endTime: new Date().toISOString()
-        })
-        throw new Error(result.message || '爬取任务启动失败')
+        throw new Error(result.error || 'Download failed')
       }
     } catch (error) {
-      console.error('Failed to start crawling:', error)
+      console.error('Failed to download video:', error)
       throw error
     } finally {
       set({ isLoading: false })
     }
   },
 
-  startProcessing: async (videoId: string) => {
+  uploadToYouTube: async (videoId: string, uploadData) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/process/${videoId}`, {
-        method: 'POST'
+      const response = await fetch(`${API_BASE_URL}/api/videos/${videoId}/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(uploadData)
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Upload failed')
       }
 
       const result = await response.json()
 
-      if (!result.success) {
-        throw new Error(result.message || '处理失败')
-      }
-      if (result.data.taskId) {
+      if (result.success) {
+        // 更新本地视频数据
+        get().updateVideo(videoId, {
+          youtubeId: result.data.youtubeId,
+          status: {
+            stage: 'completed',
+            progress: 100,
+            message: '上传完成'
+          }
+        })
+        return result.data
       } else {
-        throw new Error(result.message || '处理失败')
-      }
-
-      get().fetchVideoStatus(videoId)
-    } catch (error) {
-      console.error('Failed to start processing:', error)
-      throw error
-    }
-  },
-
-  retryStep: async (videoId: string, step: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/retry/${videoId}/${step}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ options: {} })
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-
-      if (!result.success) {
-        throw new Error(result.message || '重试失败')
-      }
-    } catch (error) {
-      console.error('Failed to retry step:', error)
-      throw error
-    }
-  },
-
-  uploadToYouTube: async (videoId: string, metadata) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/upload/${videoId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(metadata)
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-
-      if (!result.success) {
-        throw new Error(result.message || '上传失败')
+        throw new Error(result.error || 'Upload failed')
       }
     } catch (error) {
       console.error('Failed to upload to YouTube:', error)
@@ -402,11 +200,30 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
     }
   },
 
-  // 轮询任务状态
-  pollCrawlerTaskStatus: async (taskId: string) => {
+  retryTranslate: async (video: VideoMeta) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/crawler/status/${taskId}`)
+      const response = await fetch(`${API_BASE_URL}/api/retry/${video.id}`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const result = await response.json()
+      if (result.success) {
+        return result.data
+      } else {
+        throw new Error(result.error || 'Failed to retry translate')
+      }
+    } catch (error) {
+      console.error('Failed to retry translate:', error)
+      throw error
+    }
+  },
 
+
+  checkIsAuth: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/youtube/auth-status`)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -415,36 +232,40 @@ export const useVideoStore = create<VideoStore>((set, get) => ({
       const result = await response.json()
 
       if (result.success) {
-        const taskStatus = result.data
-        get().updateCrawlingTask(taskId, taskStatus)
-
-        // 如果任务完成或失败，获取最新的视频列表
-        if (taskStatus.status === 'completed' || taskStatus.status === 'error') {
-          get().fetchVideos()
-        } else {
-          setTimeout(() => {
-            get().pollCrawlerTaskStatus(taskId)
-          }, 3000)
-        }
+        return result.data.isAuthorized
+      } else {
+        return false
       }
     } catch (error) {
-      console.error('Failed to poll task status:', error)
+      console.error('Failed to check YouTube auth:', error)
+      return false
     }
   },
 
-
-  updateTranslation: async (videoId: string, subtitleId: string, translation: string) => {
+  // 删除视频
+  deleteVideo: async (videoId: string) => {
     try {
-      await fetch(`${API_BASE_URL}/api/translation/${videoId}/${subtitleId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ translation })
+      const response = await fetch(`${API_BASE_URL}/api/videos/${videoId}`, {
+        method: 'DELETE',
       })
-      get().fetchVideoStatus(videoId)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Delete failed')
+      }
+      const result = await response.json()
+      if (result.success) {
+        // 本地移除
+        set((state) => ({
+          videos: state.videos.filter(v => v.id !== videoId),
+          currentVideo: state.currentVideo?.id === videoId ? null : state.currentVideo
+        }))
+        return true
+      } else {
+        throw new Error(result.error || 'Delete failed')
+      }
     } catch (error) {
-      console.error('Failed to update translation:', error)
+      console.error('Failed to delete video:', error)
       throw error
     }
   }
-
 })) 

@@ -26,13 +26,13 @@ export class Translator {
     progressCallback?: (progress: TranslationProgress) => void
   ) {
     this.progressCallback = progressCallback;
-
     // 初始化OpenAI客户端
     if (process.env.OPENAI_API_KEY) {
       this.openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
         baseURL: process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1'
       });
+      logger.info('openai init', this.openai.baseURL)
     }
 
     // 初始化DeepL API密钥
@@ -211,7 +211,7 @@ export class Translator {
     const targetLangName = languageNames[targetLanguage] || targetLanguage;
 
     const prompt = customPrompt ||
-      `请将以下${sourceLangName}文本翻译成${targetLangName}，保持原文的语气和风格，确保翻译自然流畅， 请直接输出翻译结果，无需说明或解释：\n\n原文：${text}\n\n翻译：`;
+      `请将以下${sourceLangName}文本翻译成${targetLangName}，保持原文的语气和风格，确保翻译自然流畅， 请直接输出翻译结果，无需说明或解释, 需要保持翻译的结果为80个字符内，包含标点符号，如果超过80个字符，请进行总结概括：\n\n原文：${text}\n\n翻译：`;
 
     const response = await this.openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -309,4 +309,15 @@ export class Translator {
       throw new TranslatorError(`DeepL翻译请求失败: ${error.message}`);
     }
   }
-} 
+
+  // 简化的翻译方法，适配新的API
+  async translateSimple(text: string, from: string = 'zh', to: string = 'en'): Promise<string> {
+    const result = await this.translate({
+      text,
+      sourceLanguage: from === 'zh' ? 'zh-CN' : 'en-US',
+      targetLanguage: to === 'en' ? 'en-US' : 'zh-CN',
+      provider: 'openai'
+    })
+    return result.text
+  }
+}

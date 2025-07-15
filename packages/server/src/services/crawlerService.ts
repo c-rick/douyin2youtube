@@ -1,143 +1,98 @@
 import * as path from 'path'
 import { crawlVideo } from '../crawler'
 import { logger } from '../utils/logger'
-import { storageService } from './storageService'
-import { queueService, TaskProcessor, TaskType, taskType } from './queueService'
-import { CrawlingTask, VideoProcessingTask } from '../types'
+import { databaseService } from './databaseService'
+import { VideoMeta } from '../shared/types'
 
 class CrawlerService {
-  taskType: taskType
-  constructor() {
-    this.taskType = TaskType.Crawling
-  }
-
-  // 开始爬取任务
-  async startCrawling(
-    url: string,
-    options: any = {},
-    progressCallback?: (progress: number, message: string) => void
-  ): Promise<string> {
+  // 下载抖音视频
+  async crawlVideo(url: string): Promise<VideoMeta> {
     logger.info(`Starting crawl for URL: ${url}`)
 
     // 生成视频ID
     const videoId = this.generateVideoId()
+    const outputDir = path.join(process.cwd(), 'data', 'downloads', videoId)
 
-    try {
-      // 报告进度：开始处理
-      progressCallback?.(5, '生成视频ID...')
-
-      // 创建视频目录
-      await storageService.createVideoDirectory(videoId)
-      progressCallback?.(10, '创建存储目录...')
-
-      // 初始化视频状态
-      await storageService.updateVideoStatus(videoId, {
+    // 创建初始视频记录
+    const initialVideo: VideoMeta = {
+      id: videoId,
+      title: '',
+      author: '',
+      coverUrl: '',
+      videoUrl: '',
+      duration: 0,
+      shareUrl: url,
+      createdAt: new Date().toISOString(),
+      status: {
         stage: 'downloading',
         progress: 0,
-        message: '准备开始爬取视频...',
-        startTime: new Date().toISOString()
+        message: '开始下载视频...'
+      }
+    }
+
+    await databaseService.addVideo(initialVideo)
+
+    try {
+      // 更新下载进度
+      await databaseService.updateVideoStatus(videoId, {
+        stage: 'downloading',
+        progress: 20,
+        message: '正在解析视频链接...'
       })
-      progressCallback?.(15, '初始化视频状态...')
-
-      // 调用 crawler 包的功能
-      progressCallback?.(20, '正在解析视频链接...')
-
-      const videoDir = storageService.getVideoDirectory(videoId)
 
       logger.info(`Crawling video: ${url}`)
       const result = await crawlVideo(url, {
-        outputDir: videoDir,
-        downloadCover: options.downloadCover !== false,
-        ...options
+        outputDir,
+        downloadCover: true
       })
 
-      // 报告进度：下载完成
-      progressCallback?.(70, '视频下载完成，保存元数据...')
+      // 更新下载进度
+      await databaseService.updateVideoStatus(videoId, {
+        stage: 'downloading',
+        progress: 30,
+        message: '保存视频文件...'
+      })
 
-      // 保存完整的视频元数据
-      const videoMeta = {
-        id: videoId,
+      // 构建完整的视频元数据
+      const serverUrl = `http://localhost:${process.env.SERVER_PORT || 3001}`
+      const videoMeta: Partial<VideoMeta> = {
         title: result.videoMeta.title || '未知标题',
         author: result.videoMeta.author || '未知作者',
         coverUrl: result.videoMeta.coverUrl || '',
         videoUrl: result.videoMeta.videoUrl || '',
         duration: result.videoMeta.duration || 0,
-        shareUrl: result.videoMeta.shareUrl || url,
-        createdAt: result.videoMeta.createdAt || new Date().toISOString(),
-        downloadTime: new Date().toISOString(),
+        localPath: result.paths.video || '',
+        remotePath: `${serverUrl}/api/file/${videoId}`,
         status: {
           stage: 'idle',
-          progress: 100,
-          message: '视频下载完成，等待处理'
-        },
-        localPaths: {
-          video: result.paths.video || '',
-          cover: result.paths.cover || '',
-          meta: result.paths.meta || '',
-          directory: result.paths.video ? path.dirname(result.paths.video) : ''
-        },
-        remotePaths: {
-          video: result.paths.video ? `/api/files/${videoId}/${path.basename(result.paths.video)}` : '',
-          cover: result.paths.cover ? `/api/files/${videoId}/${path.basename(result.paths.cover)}` : '',
-          meta: result.paths.meta ? `/api/files/${videoId}/${path.basename(result.paths.meta)}` : '',
-          directory: `/api/files/${videoId}`
+          progress: 40,
+          message: '视频下载完成'
         }
       }
 
-      await storageService.saveVideoMeta(videoMeta)
-      progressCallback?.(90, '保存视频元数据...')
+      // 更新视频元数据
+      await databaseService.updateVideo(videoId, videoMeta)
 
-      // 更新最终状态
-      await storageService.updateVideoStatus(videoId, {
-        stage: 'idle',
-        progress: 100,
-        message: '视频爬取完成',
-        endTime: new Date().toISOString()
-      })
-
-      progressCallback?.(100, '视频爬取完成')
       logger.info(`Crawl completed for video: ${videoId}`)
 
-      return videoId
+      // 返回完整的视频数据
+      const completeVideo = await databaseService.getVideoById(videoId)
+      if (!completeVideo) {
+        throw new Error('Failed to retrieve video after saving')
+      }
+
+      return completeVideo
+
     } catch (error: any) {
       logger.error(`Crawl failed for video ${videoId}:`, error)
 
       // 更新失败状态
-      await storageService.updateVideoStatus(videoId, {
+      await databaseService.updateVideoStatus(videoId, {
         stage: 'error',
         progress: 0,
-        message: '视频爬取失败',
-        error: error.message,
-        endTime: new Date().toISOString()
+        message: '视频下载失败',
+        error: error.message
       })
-
-      throw error
-    }
-  }
-
-  // 处理爬取任务
-  public async processCrawlTask(taskId: string): Promise<void> {
-    const task = await queueService.getTask(taskId, this.taskType) as CrawlingTask
-    if (!task) {
-      throw new Error(`Task not found: ${taskId}`)
-    }
-    const { url, options, videoId } = task
-
-
-    try {
-      const videoId = await this.startCrawling(url, options, (progress: number, message: string) => {
-        queueService.updateTask(taskId, this.taskType, {
-          status: 'running',
-          progress,
-          message
-        })
-      })
-
-      // 任务完成
-      await queueService.completeTask(taskId, this.taskType, videoId)
-    } catch (error: any) {
-      logger.error(`Crawl failed for video ${videoId}:`, error)
-
 
       throw error
     }

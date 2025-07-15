@@ -1,43 +1,28 @@
-import Router from 'koa-router'
+import express, { Router } from 'express'
 import { apiController } from '../controllers/apiController'
-import * as path from 'path'
-import * as fs from 'fs'
 
-const router = new Router({
-  prefix: '/api'
-})
+const router: Router = express.Router()
 
-// 爬取相关路由
-router.post('/crawler/start', apiController.startCrawling.bind(apiController))
-router.get('/crawler/list', apiController.getVideoList.bind(apiController))
-router.get('/crawler/status/:taskId', apiController.getCrawlingTaskStatus.bind(apiController))
-router.get('/crawler/tasks', apiController.getAllCrawlingTasks.bind(apiController))
-router.delete('/crawler/tasks/:taskId', apiController.deleteCrawlingTask.bind(apiController))
+// 视频相关接口
+router.get('/videos', apiController.getVideos.bind(apiController))
 
-// 视频资源
-router.get('/files/:id/:fpath', async (ctx) => {
-  const { id, fpath } = ctx.params
-  const filePath = path.join(process.cwd(), 'data', 'downloads', id, fpath)
-  console.log('filePath', filePath)
-  ctx.body = fs.createReadStream(filePath)
-})
-// 更新字幕翻译
-router.post('/translation/:videoId/:subtitleId', apiController.updateTranslation.bind(apiController))
+router.get('/videos/:id', apiController.getVideo.bind(apiController))
+// 下载视频
+router.post('/download', apiController.downloadVideo.bind(apiController))
 
-// 视频处理路由
-router.post('/process/:id', apiController.startProcessing.bind(apiController))
+// 远程视频访问视频静态数据
+router.get('/file/:id', apiController.getVideoFile.bind(apiController))
 
-// 重试特定步骤路由
-router.post('/retry/:id/:step', apiController.retryStep.bind(apiController))
+// 重试翻译
+router.post('/retry/:id', apiController.retryTranslate.bind(apiController))
 
-// 状态查询路由
-router.get('/status/:id', apiController.getVideoStatus.bind(apiController))
+// 上传到YouTube
+router.post('/videos/:id/upload', apiController.uploadVideo.bind(apiController))
 
-// 上传路由
-router.post('/upload/:id', apiController.uploadToYouTube.bind(apiController))
+// 删除视频
+router.delete('/videos/:id', apiController.deleteVideo.bind(apiController))
 
-// 视频详情路由
-router.get('/video/:id', apiController.getVideoById.bind(apiController))
+// YouTube授权
+router.get('/youtube/auth-status', apiController.checkYouTubeAuth.bind(apiController))
 
-// 导出配置好的路由
-export const apiRouter = router 
+export default router 

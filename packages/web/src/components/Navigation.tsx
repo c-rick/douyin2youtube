@@ -13,7 +13,7 @@ const navItems = [
     icon: Home
   },
   {
-    name: '视频爬取',
+    name: '下载视频',
     href: '/crawler',
     icon: Download
   },
@@ -21,11 +21,6 @@ const navItems = [
     name: '编辑处理',
     href: '/editor',
     icon: Edit
-  },
-  {
-    name: '上传发布',
-    href: '/upload',
-    icon: Upload
   }
 ]
 
@@ -33,7 +28,7 @@ export function Navigation() {
   const pathname = usePathname()
   const isMobile = useMediaQuery({ query: '(max-width: 767px)' })
   return (
-    <nav className={`bg-white border-b border-gray-200  ${isMobile ? '' : 'sticky top-0 z-10'}`} >
+    <nav className={`bg-gray-800 border-b border-gray-700 backdrop-blur-sm  ${isMobile ? '' : 'sticky top-0 z-10'}`} >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           {/* Logo */}
@@ -56,8 +51,8 @@ export function Navigation() {
                   className={clsx(
                     'inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors',
                     isActive
-                      ? 'border-blue-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                      ? 'border-red-500 text-white '
+                      : 'border-transparent text-gray-300 hover:border-red-400 hover:text-red-400'
                   )}
                 >
                   <Icon className="w-4 h-4 mr-2" />

@@ -16,6 +16,7 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+    "sourceMap": true,
     "baseUrl": ".",
     "paths": {
       "@douyin2youtube/server": [

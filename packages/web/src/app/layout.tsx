@@ -22,9 +22,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={inter.className}>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-900">
           <Navigation />
-          <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <main>
             {children}
           </main>
         </div>
@@ -33,8 +33,9 @@ export default function RootLayout({
           toastOptions={{
             duration: 4000,
             style: {
-              background: '#363636',
+              background: '#1f2937',
               color: '#fff',
+              border: '1px solid #374151',
             },
           }}
         />

@@ -119,8 +119,16 @@ function VideoCard({ video, isSelected, onSelect, onStartProcessing, showNavigat
 
         <div className="flex items-center text-sm text-gray-500">
           <Calendar className="w-4 h-4 mr-1" />
-          <span>{formatDate(video.createTime)}</span>
+          <span>{formatDate(video.createdAt)}</span>
         </div>
+
+        {/* 最后更新时间 */}
+        {lastUpdated && (
+          <div className="flex items-center text-xs text-gray-500">
+            <Clock className="w-3 h-3 mr-1" />
+            <span>最后更新: {lastUpdated.toLocaleTimeString()}</span>
+          </div>
+        )}
 
         {/* 进度条 */}
         {video.status.stage !== 'idle' && video.status.stage !== 'completed' && video.status.stage !== 'error' && (

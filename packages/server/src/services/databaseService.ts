@@ -2,20 +2,15 @@ import low from 'lowdb'
 import FileSync from 'lowdb/adapters/FileSync'
 import path from 'path'
 import { logger } from '../utils/logger'
-import { CrawlingTask, UploadingTask, VideoMetadata, VideoProcessingTask } from '../types'
-import { Task, taskType } from './queueService'
+import { VideoMeta, ProcessingStage } from '../shared/types'
 
-
-// 数据库结构
+// 简化的数据库结构
 interface DatabaseSchema {
-  crawlingTasks: CrawlingTask[]
-  processingTasks: VideoProcessingTask[]
-  uploadingTasks: VideoProcessingTask[]
-  videos: VideoMetadata[]
+  videos: VideoMeta[]
 }
 
 class DatabaseService {
-  private db: low.LowdbSync<DatabaseSchema>
+  private db: any
 
   constructor() {
     // 数据文件路径
@@ -27,113 +22,14 @@ class DatabaseService {
 
     // 设置默认值
     this.db.defaults({
-      crawlingTasks: [],
-      processingTasks: [],
-      uploadingTasks: [],
       videos: []
     }).write()
 
     logger.info(`Database initialized at: ${dbPath}`)
   }
 
-  // 任务相关方法
-  async addTask(task: Task): Promise<void> {
-    try {
-      const taskTypeKey = task.type + 'Tasks'
-      this.db.get(taskTypeKey)
-        .push(task)
-        .write()
-      logger.info(`${taskTypeKey} Task added: ${task.id}`)
-    } catch (error) {
-      logger.error(`Failed to add task ${task.id}:`, error)
-      throw error
-    }
-  }
-
-  async getTask(taskId: string, type: taskType): Promise<Task | undefined> {
-    try {
-      return this.db.get(type + 'Tasks')
-        .find({ id: taskId })
-        .value()
-    } catch (error) {
-      logger.error(`Failed to get task ${taskId}:`, error)
-      throw error
-    }
-  }
-
-  async getTaskByVideoId(videoId: string, type: taskType): Promise<Task | undefined> {
-    try {
-      return this.db.get(type + 'Tasks')
-        .find({ videoId: videoId })
-        .value()
-    } catch (error) {
-      logger.error(`Failed to get task by videoId ${videoId}:`, error)
-      throw error
-    }
-  }
-
-  async updateTask(taskId: string, type: taskType, updates: Partial<Task>): Promise<boolean> {
-    try {
-      const task = this.db.get(type + 'Tasks')
-        .find({ id: taskId })
-
-      if (!task.value()) {
-        return false
-      }
-
-      task.assign(updates).write()
-      logger.info(`Task updated: ${taskId}`)
-      return true
-    } catch (error) {
-      logger.error(`Failed to update task ${taskId}:`, error)
-      throw error
-    }
-  }
-
-  async removeTask(taskId: string): Promise<boolean> {
-    try {
-      const initialLength = this.db.get('crawlingTasks').size().value()
-      this.db.get('crawlingTasks')
-        .remove({ id: taskId })
-        .write()
-      const newLength = this.db.get('crawlingTasks').size().value()
-
-      const removed = initialLength > newLength
-      if (removed) {
-        logger.info(`Task removed: ${taskId}`)
-      }
-      return removed
-    } catch (error) {
-      logger.error(`Failed to remove task ${taskId}:`, error)
-      throw error
-    }
-  }
-
-  async getAllTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
-    try {
-      return this.db.get(type + 'Tasks')
-        .orderBy(['createdAt'], ['desc'])
-        .value()
-    } catch (error) {
-      logger.error('Failed to get all tasks:', error)
-      throw error
-    }
-  }
-
-  async getActiveTasks(type: taskType): Promise<CrawlingTask[] | VideoProcessingTask[]> {
-    try {
-      return this.db.get(type + 'Tasks')
-        .filter((task: any) => task.status === 'pending' || task.status === 'running')
-        .orderBy(['startTime'], ['asc'])
-        .value()
-    } catch (error) {
-      logger.error('Failed to get active tasks:', error)
-      throw error
-    }
-  }
-
   // 视频相关方法
-  async addVideo(video: VideoMetadata): Promise<void> {
+  async addVideo(video: VideoMeta): Promise<void> {
     try {
       this.db.get('videos')
         .push(video)
@@ -145,7 +41,7 @@ class DatabaseService {
     }
   }
 
-  async getVideo(videoId: string): Promise<VideoMetadata | undefined> {
+  async getVideoById(videoId: string): Promise<VideoMeta | undefined> {
     try {
       return this.db.get('videos')
         .find({ id: videoId })
@@ -156,7 +52,7 @@ class DatabaseService {
     }
   }
 
-  async updateVideo(videoId: string, updates: Partial<VideoMetadata>): Promise<boolean> {
+  async updateVideo(videoId: string, updates: Partial<VideoMeta>): Promise<boolean> {
     try {
       const video = this.db.get('videos')
         .find({ id: videoId })
@@ -174,10 +70,33 @@ class DatabaseService {
     }
   }
 
-  async getAllVideos(): Promise<VideoMetadata[]> {
+  async updateVideoStatus(videoId: string, status: {
+    stage: ProcessingStage
+    progress: number
+    message?: string
+    error?: string
+  }): Promise<boolean> {
+    try {
+      const video = this.db.get('videos')
+        .find({ id: videoId })
+
+      if (!video.value()) {
+        return false
+      }
+
+      video.assign({ status }).write()
+      logger.info(`Video status updated: ${videoId} - ${status.stage} (${status.progress}%)`)
+      return true
+    } catch (error) {
+      logger.error(`Failed to update video status ${videoId}:`, error)
+      throw error
+    }
+  }
+
+  async getAllVideos(): Promise<VideoMeta[]> {
     try {
       return this.db.get('videos')
-        .orderBy(['downloadTime'], ['desc'])
+        .orderBy(['createdAt'], ['desc'])
         .value()
     } catch (error) {
       logger.error('Failed to get all videos:', error)
@@ -185,34 +104,116 @@ class DatabaseService {
     }
   }
 
-  // 清理过期任务
-  async cleanupTasks(maxAgeDays: number = 7): Promise<number> {
+  async deleteVideo(videoId: string): Promise<boolean> {
+    try {
+      const initialLength = this.db.get('videos').size().value()
+      this.db.get('videos')
+        .remove({ id: videoId })
+        .write()
+      const newLength = this.db.get('videos').size().value()
+
+      const removed = initialLength > newLength
+      if (removed) {
+        logger.info(`Video deleted: ${videoId}`)
+      }
+      return removed
+    } catch (error) {
+      logger.error(`Failed to delete video ${videoId}:`, error)
+      throw error
+    }
+  }
+
+  // 查询方法
+  async getVideosByStatus(stage: ProcessingStage): Promise<VideoMeta[]> {
+    try {
+      return this.db.get('videos')
+        .filter({ status: { stage } })
+        .orderBy(['createdAt'], ['desc'])
+        .value()
+    } catch (error) {
+      logger.error(`Failed to get videos by status ${stage}:`, error)
+      throw error
+    }
+  }
+
+  async getVideosWithYouTubeId(): Promise<VideoMeta[]> {
+    try {
+      return this.db.get('videos')
+        .filter((video: VideoMeta) => !!video.youtubeId)
+        .orderBy(['createdAt'], ['desc'])
+        .value()
+    } catch (error) {
+      logger.error('Failed to get videos with YouTube ID:', error)
+      throw error
+    }
+  }
+
+  // 统计方法
+  async getStats(): Promise<{
+    total: number
+    byStatus: Record<ProcessingStage, number>
+    withTranslation: number
+    uploaded: number
+  }> {
+    try {
+      const videos = this.db.get('videos').value()
+      const total = videos.length
+
+      const byStatus: Record<ProcessingStage, number> = {
+        idle: 0,
+        downloading: 0,
+        translating: 0,
+        uploading: 0,
+        completed: 0,
+        error: 0
+      }
+
+      let withTranslation = 0
+      let uploaded = 0
+
+      videos.forEach((video: VideoMeta) => {
+        byStatus[video.status.stage]++
+        if (video.titleEn) withTranslation++
+        if (video.youtubeId) uploaded++
+      })
+
+      return {
+        total,
+        byStatus,
+        withTranslation,
+        uploaded
+      }
+    } catch (error) {
+      logger.error('Failed to get stats:', error)
+      throw error
+    }
+  }
+
+  // 清理方法
+  async cleanupOldVideos(maxAgeDays: number = 30): Promise<number> {
     try {
       const now = new Date()
       const maxAge = maxAgeDays * 24 * 60 * 60 * 1000 // 转换为毫秒
-      const types = ['crawling', 'processing', 'uploading']
-      let removedCount = 0
-      for (const type of types) {
-        const initialLength = this.db.get(type + 'Tasks').size().value()
 
-        this.db.get(type + 'Tasks')
-          .remove((task: any) => {
-            const taskDate = new Date(task.startTime)
-            return now.getTime() - taskDate.getTime() > maxAge &&
-              (task.status === 'completed' || task.status === 'failed')
-          })
-          .write()
+      const initialLength = this.db.get('videos').size().value()
 
-        const newLength = this.db.get(type + 'Tasks').size().value()
-        const removedCount = initialLength - newLength
+      this.db.get('videos')
+        .remove((video: VideoMeta) => {
+          const videoDate = new Date(video.createdAt)
+          return (now.getTime() - videoDate.getTime()) > maxAge
+        })
+        .write()
 
-        if (removedCount > 0) {
-          logger.info(`Cleaned up ${removedCount} old tasks`)
-        }
+      const newLength = this.db.get('videos').size().value()
+      const removedCount = initialLength - newLength
+
+      if (removedCount > 0) {
+        logger.info(`Cleaned up ${removedCount} old videos`)
       }
+
       return removedCount
     } catch (error) {
-      logger.error('Failed to cleanup tasks:', error)
+      logger.error('Failed to cleanup old videos:', error)
       throw error
     }
   }

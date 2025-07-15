@@ -57,7 +57,46 @@
       "videoId": "20250708_qfl7q0do"
     }
   ],
-  "videos": [],
+  "videos": [
+    {
+      "id": "20250714_vbcfs5qm",
+      "title": "在这种氛围下太适合听这首《Apollo's Triumph》了，仿佛能忘掉一切烦恼。#最美的风景在路上",
+      "author": "旅行收藏家Like✨",
+      "coverUrl": "https://p3-pc-sign.douyinpic.com/image-cut-tos-priv/86e38080b0fa167b5c036f4517c80871~tplv-dy-resize-origshort-autoq-75:330.jpeg?lk3s=138a59ce&x-expires=2067843600&x-signature=iu7%2FPTH6B6ZW6MzWn5psu6pQIMo%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=cover&biz_tag=pcweb_cover&l=202507141720288232F393758F9D667BAF",
+      "videoUrl": "https://v3-web.douyinvod.com/a4206b6e17dd201c02d86ae10dca1c1e/6874f618/video/tos/cn/tos-cn-ve-15c001-alinc2/okNDEoZcIfdANYTBEOcnbAb9LEAeQPpgDaykE4/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=2184&bt=2184&cs=0&ds=4&ft=AJkeU_TLRR0si0C4kDn2Nc.xBiGNbL_O9rdU_4Yqu6JJNv7TGW&mime_type=video_mp4&qs=0&rc=ODc5NTZkNWdoOjo2NmY2O0BpajdreGg6Zms8azMzNGkzM0BgXzFgYmNhXy4xLS4wYzNeYSNhZi1zcjQwMjRgLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100x_100z_100o_100w_100B&dy_q=1752484828&feature_id=f0150a16a324336cda5d6dd0b69ed299&l=202507141720288232F393758F9D667BAF",
+      "duration": 12,
+      "shareUrl": "https://www.douyin.com/video/7227876026351766836?modeFrom=searchResult&previous_page=general_search&tab_name=discover",
+      "createdAt": "2025-07-14T09:20:27.583Z",
+      "status": {
+        "stage": "completed",
+        "progress": 100,
+        "message": "上传完成"
+      },
+      "localPath": "/Users/c-rick/ai/douyin2youtube/packages/server/data/downloads/20250714_vbcfs5qm/hd.mp4",
+      "remotePath": "http://localhost:3001/api/file/20250714_vbcfs5qm",
+      "titleEn": "In this atmosphere, listening to \"Apollo's Triumph\" feels perfect, as if all worries fade away.",
+      "youtubeId": "zJnZLn-7hlw"
+    },
+    {
+      "id": "20250715_5zadurn0",
+      "title": "我在想，是什么样的人会喜欢这种氛围呢？ #旅行大玩家 #氛围感",
+      "author": "旅行收藏家Like✨",
+      "coverUrl": "https://p3-pc-sign.douyinpic.com/image-cut-tos-priv/201f304be1c013990cf81dee8c32ddd9~tplv-dy-resize-origshort-autoq-75:330.jpeg?lk3s=138a59ce&x-expires=2067908400&x-signature=pLKDRWVXvEhpy9vVWCrk69V5prQ%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=cover&biz_tag=pcweb_cover&l=202507151130498BD49E230EF50A7108BC",
+      "videoUrl": "https://v3-web.douyinvod.com/9d79d6af045daf281d8e26bd0b1345d3/6875f5a2/video/tos/cn/tos-cn-ve-15c001-alinc2/owiYxQD2klATreQFBQeDgWnQARA9lbVEIQb9NV/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=2809&bt=2809&cs=0&ds=4&ft=AJkeU_TLRR0si0C4kDn2Nc.xBiGNbLk-krdU_4Yqu6JJNv7TGW&mime_type=video_mp4&qs=0&rc=ZTUzOGZpZGk7NDhlZGg8N0BpM3g0Nzs6ZjdvazMzNGkzM0BiYF5iMjAyXjIxYWFfLjA0YSNvcTYxcjQwXy9gLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100w_100B_100x_100z_100o&dy_q=1752550249&feature_id=f0150a16a324336cda5d6dd0b69ed299&l=202507151130498BD49E230EF50A7108BC",
+      "duration": 9,
+      "shareUrl": "https://www.douyin.com/video/7225275272029834531?modeFrom=searchResult",
+      "createdAt": "2025-07-15T03:30:48.266Z",
+      "status": {
+        "stage": "completed",
+        "progress": 100,
+        "message": "上传完成"
+      },
+      "localPath": "/Users/c-rick/ai/douyin2youtube/packages/server/data/downloads/20250715_5zadurn0/hd.mp4",
+      "remotePath": "http://localhost:3001/api/file/20250715_5zadurn0",
+      "titleEn": "I wonder what kind of people would enjoy this atmosphere? #TravelEnthusiast #Vibe",
+      "youtubeId": "ZMp5Z-5I_WE"
+    }
+  ],
   "processingTasks": [
     {
       "videoId": "20250708_6pi59525",
