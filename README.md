@@ -1,4 +1,4 @@
-# 📦 Douyin2YouTube 简化版
+
 <p align="center">
 <img src="/packages/web/public/logo.svg" width="200" alt="Logo">
 </p>
@@ -8,9 +8,8 @@
 
 ## 1. 用例（Usecase）
 
-![用例演示](docs/usecase.gif)
+![用例演示](https://aiccplayground.online/usecase.gif)
 
----
 
 ## 2. 快速开始（Quick Start）
 
