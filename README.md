@@ -79,7 +79,7 @@ pnpm dev
 ---
 
 ## 3. todo 
-- [ ] 自动获取抖音cookie 
+- [✔️] 自动获取抖音cookie 
 - [ ] 桌面应用
 - [ ] 其他欢迎issues
 

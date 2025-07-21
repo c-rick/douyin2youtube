@@ -10,8 +10,8 @@ export default defineConfig({
   minify: false,
   target: 'node18',
   outDir: 'dist',
-  // 更新为Express相关的依赖
-  noExternal: ['express', 'cors'],
+  // 更新为Express相关的依赖和ESM模块
+  noExternal: ['express', 'cors', 'chrome-launcher'],
   tsconfig: './tsconfig.build.json',
   // 开发环境配置
   env: {

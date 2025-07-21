@@ -20,10 +20,17 @@ if [ ! -d "external/douyin-api" ]; then
 fi
 
 # 检查 Python 是否安装
-if ! command -v python &> /dev/null; then
-    echo "❌ 错误: 未找到 Python，请先安装 Python"
+if command -v python3 &> /dev/null; then
+    PYTHON_BIN=$(command -v python3)
+elif command -v python &> /dev/null; then
+    PYTHON_BIN=$(command -v python)
+else
+    echo "❌ 错误: 未找到 Python，请先安装 Python 或 Python3"
     exit 1
 fi
+
+
+echo "✅ 使用 Python: $PYTHON_BIN"
 
 echo "🚀 启动抖音 API 服务..."
 echo "📍 服务地址: http://localhost:8000"
@@ -41,7 +48,7 @@ if [ ! -f "requirements.txt" ]; then
 fi
 
 echo "📦 检查 Python 依赖..."
-python -c "import fastapi, uvicorn" 2>/dev/null || {
+$PYTHON_BIN -c "import fastapi, uvicorn" 2>/dev/null || {
     echo "⚠️  警告: Python 依赖未完全安装"
     echo "请运行: cd external/douyin-api && pip install -r requirements.txt"
     echo ""
@@ -49,4 +56,4 @@ python -c "import fastapi, uvicorn" 2>/dev/null || {
 }
 
 # 启动服务
-python start.py 
+$PYTHON_BIN start.py 

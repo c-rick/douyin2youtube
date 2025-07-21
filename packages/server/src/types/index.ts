@@ -126,4 +126,24 @@ export interface VideoMetadata {
     meta: string
     directory: string
   }
-} 
+}
+// 全局定义navigator和document
+declare global {
+  interface Navigator {
+    userAgent: string;
+    language: string;
+    languages: readonly string[];
+    platform: string;
+  }
+
+  interface Document {
+    title: string;
+    cookie: string;
+    createElement(tagName: string): HTMLElement;
+    getElementById(id: string): HTMLElement | null;
+    querySelector(selectors: string): Element | null;
+  }
+
+  var navigator: Navigator;
+  var document: Document;
+}

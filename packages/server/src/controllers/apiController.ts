@@ -1,14 +1,25 @@
 import { Request, Response } from 'express'
 import { crawlerService } from '../services/crawlerService'
 import { databaseService } from '../services/databaseService'
+import { cookieService } from '../services/cookieService'
+import { browserCookieService } from '../services/browserCookieService'
 import { Translator } from '../translator'
 import { getYouTubeUploader } from '../uploader'
 import { logger } from '../utils/logger'
 import { VideoMeta, TranslateRequest, UploadRequest } from '../shared/types'
 import axios from 'axios'
+import fs from 'fs'
+import path from 'path'
+import yaml from 'js-yaml'
+import { stdout } from 'process'
+
+const rootDir = path.resolve(process.cwd(), '..', '..')
 
 export class ApiController {
 
+  constructor() {
+    this.initDouyinServer()
+  }
   // 客户端视频播放接口
   async getVideoFile(req: Request, res: Response) {
     try {
@@ -120,6 +131,7 @@ export class ApiController {
       }
 
       logger.info(`开始下载视频: ${url}`)
+
       // 检测是不是抖音视频
       if (!url.includes('douyin.com')) {
         res.status(400).json({
@@ -128,6 +140,9 @@ export class ApiController {
         })
         return
       }
+
+
+      await this.checkHasDouyinServer()
       // 检测url是否是 https://www.douyin.com/video/7290922811537820928 格式
       if (!url.startsWith('https://www.douyin.com/video/')) {
         // 下载dom页面，拿到div有data-e2e-vid的属性，拿到视频id，然后拼接成 https://www.douyin.com/video/7290922811537820928 格式
@@ -421,6 +436,144 @@ export class ApiController {
       })
     }
   }
+
+  // 检查是否有抖音服务 
+  async checkHasDouyinServer() {
+    try {
+      const response = await axios.get(process.env.DOUYIN_API_URL + '/api/status', { timeout: 5000 })
+      if (response.data && response.data.success) {
+        logger.info('抖音服务正常运行')
+        return true
+      } else {
+        logger.warn('抖音服务状态异常:', response.data)
+        await this.initDouyinServer()
+      }
+    } catch (error) {
+      logger.error('无法连接到抖音服务:', error)
+    }
+  }
+
+  // 启动抖音服务  bash scripts/start-douyin-api.sh
+  async startDouyinServer() {
+    try {
+      const { spawn, execSync } = require('child_process')
+      const scriptPath = path.resolve(rootDir, 'scripts/start-douyin-api.sh')
+
+      if (!fs.existsSync(scriptPath)) {
+        logger.error('启动脚本不存在:', scriptPath)
+        return
+      }
+
+      logger.info('正在启动抖音服务...', scriptPath)
+      const child = spawn('bash', [scriptPath], {
+        cwd: rootDir,
+        shell: process.env.SHELL,
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      child.stdout?.on('data', (data: any) => {
+        logger.info(`抖音服务输出: ${data.toString().trim()}`)
+      })
+      child.stderr?.on('data', (data: any) => {
+        logger.error(`抖音服务错误: ${data.toString().trim()}`)
+      })
+
+      // 等待服务启动
+      let attempts = 0
+      const maxAttempts = 10
+
+      while (attempts < maxAttempts) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          const response = await axios.get(process.env.DOUYIN_API_URL + '/docs', { timeout: 5000 })
+
+          if (response.status === 200) {
+            logger.info('抖音服务已成功启动')
+            return true
+          }
+        } catch (error) {
+          logger.debug(`等待抖音服务启动中... (${attempts + 1}/${maxAttempts})`)
+        }
+        attempts++
+      }
+
+      logger.warn('抖音服务可能未成功启动，请检查日志')
+    } catch (error) {
+      logger.error('启动抖音服务失败:', error)
+    }
+  }
+
+  // 初始化抖音
+  async initDouyinServer() {
+    // 检查Cookie状态
+    logger.info('检查Cookie状态...')
+    const cookieValid = await cookieService.validateCookies()
+    const cookieData = await cookieService.getCookies()
+
+    if (!cookieValid) {
+      const cookieCount = cookieData?.cookies?.length || 0
+      logger.warn(`Cookie状态无效，当前Cookie数量: ${cookieCount}`)
+
+      // 自动启动浏览器获取Cookie
+      logger.info('开始自动获取Cookie...')
+
+      try {
+        // 启动浏览器会话
+        const browserResult = await browserCookieService.startBrowserSession()
+        if (!browserResult.success) {
+          throw new Error(browserResult.message)
+        }
+
+        // 等待用户登录并自动获取Cookie (3分钟超时)
+        const loginResult = await browserCookieService.waitForLogin(180000)
+
+        if (loginResult.success && loginResult.cookies) {
+          // 获取用户代理
+          const userAgent = await browserCookieService.getUserAgent()
+
+          // 保存Cookie
+          await cookieService.saveCookies(loginResult.cookies, userAgent)
+          logger.info('Cookie自动获取并保存成功')
+
+          // 关闭浏览器
+          await browserCookieService.closeBrowserSession()
+
+          logger.info('Cookie获取成功，继续下载视频...')
+        } else {
+          // 关闭浏览器
+          await browserCookieService.closeBrowserSession()
+          return
+        }
+      } catch (error) {
+        logger.error('自动获取Cookie失败:', error)
+
+        // 确保关闭浏览器
+        await browserCookieService.closeBrowserSession()
+
+        return
+      }
+    } else {
+      logger.info('Cookie状态有效，继续下载...')
+    }
+
+    if (cookieData?.cookies) {
+      // 修改douyin-api/crawlers/douyin/web/config.yaml 11行的Cookies的值
+      try {
+        const configPath = path.resolve(rootDir, 'external/douyin-api/crawlers/douyin/web/config.yaml')
+        if (fs.existsSync(configPath)) {
+          const config = yaml.load(fs.readFileSync(configPath, 'utf8')) as any
+          config.TokenManager.douyin.headers.Cookie = cookieData.cookies
+          fs.writeFileSync(configPath, yaml.dump(config))
+          logger.info('已更新抖音爬虫配置文件的Cookie')
+          this.startDouyinServer()
+        } else {
+          logger.warn('抖音爬虫配置文件不存在:', configPath)
+        }
+      } catch (error) {
+        logger.error('更新抖音爬虫配置文件失败:', error)
+      }
+    }
+  }
+
 }
 
 export const apiController = new ApiController() 
