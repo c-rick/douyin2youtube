@@ -23,23 +23,32 @@ export function createApp(): express.Application {
   })
 
   app.get('/auth', (req, res) => {
-    const youtubeUploader = getYouTubeUploader()
-    if (youtubeUploader.authUrl) {
-      res.redirect(youtubeUploader.authUrl)
-    } else {
-      res.status(400).json({
-        success: false,
-        error: 'YouTube授权失败'
-      })
+    try {
+
+      const youtubeUploader = getYouTubeUploader()
+      if (youtubeUploader.authUrl) {
+        res.redirect(youtubeUploader.authUrl)
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'YouTube授权失败'
+        })
+      }
+    } catch (err) {
+      logger.error('auth error', err)
     }
   })
 
   app.get('/oauth2callback', async (req, res) => {
-    const { code } = req.query
-    if (code) {
-      const youtubeUploader = getYouTubeUploader()
-      await youtubeUploader.getTokensFromCode(code as string)
-      res.redirect('http://localhost:3000/editor')
+    try {
+      const { code } = req.query
+      if (code) {
+        const youtubeUploader = getYouTubeUploader()
+        await youtubeUploader.getTokensFromCode(code as string)
+        res.redirect('http://localhost:3000/editor')
+      }
+    } catch (err) {
+      logger.error('auth callback error', err)
     }
   })
 

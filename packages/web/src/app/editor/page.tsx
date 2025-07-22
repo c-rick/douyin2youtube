@@ -313,15 +313,21 @@ export default function EditorPage() {
               </div>
 
               {/* 视频预览 */}
-              {currentVideo.coverUrl && (
+              {currentVideo.remotePath ?
                 <div className="mb-6">
-                  <img
-                    src={currentVideo.coverUrl}
-                    alt={currentVideo.title}
-                    className="w-full max-w-md h-auto rounded-lg"
-                  />
+                  <video className="w-full  max-w-md h-auto rounded-lg" controls  >
+                    <source src={currentVideo.remotePath} type="video/mp4" />
+                  </video>
                 </div>
-              )}
+                : currentVideo.coverUrl && (
+                  <div className="mb-6">
+                    <img
+                      src={currentVideo.coverUrl}
+                      alt={currentVideo.title}
+                      className="w-full max-w-md h-auto rounded-lg"
+                    />
+                  </div>
+                )}
 
               {/* 状态信息 */}
               <div className="mb-6 p-4 bg-gray-700 rounded-lg">

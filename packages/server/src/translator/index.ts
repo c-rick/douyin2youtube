@@ -21,18 +21,28 @@ export class Translator {
   private openai?: OpenAI;
   private deeplApiKey?: string;
   private progressCallback?: (progress: TranslationProgress) => void;
+  private model?: string
 
   constructor(
     progressCallback?: (progress: TranslationProgress) => void
   ) {
     this.progressCallback = progressCallback;
+
     // 初始化OpenAI客户端
-    if (process.env.OPENAI_API_KEY) {
+    if (process.env.QWEN_API_KEY) {
+      this.openai = new OpenAI({
+        apiKey: process.env.QWEN_API_KEY,
+        baseURL: process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      });
+      this.model = process.env.QWEN_MODEL
+      logger.info('openai init', this.model)
+    } else if (process.env.OPENAI_API_KEY) {
       this.openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
         baseURL: process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1'
       });
-      logger.info('openai init', this.openai.baseURL)
+      this.model = process.env.OPENAI_MODEL
+      logger.info('openai init', this.model)
     }
 
     // 初始化DeepL API密钥
@@ -60,7 +70,7 @@ export class Translator {
   async translate(options: TranslationOptions): Promise<TranslationResult> {
     try {
       this.updateProgress('translating', 45, '开始翻译...');
-
+      options.targetLanguage = options.targetLanguage || 'en'
       // 验证语言代码
       if (!validateLanguageCode(options.targetLanguage)) {
         throw new TranslatorError(`不支持的目标语言: ${options.targetLanguage}`);
@@ -214,7 +224,7 @@ export class Translator {
       `请将以下${sourceLangName}文本翻译成${targetLangName}，保持原文的语气和风格，确保翻译自然流畅， 请直接输出翻译结果，无需说明或解释, 需要保持翻译的结果为80个字符内，包含标点符号，如果超过80个字符，请进行总结概括：\n\n原文：${text}\n\n翻译：`;
 
     const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: this.model,
       messages: [
         {
           role: 'system',

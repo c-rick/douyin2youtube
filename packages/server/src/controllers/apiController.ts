@@ -12,6 +12,7 @@ import fs from 'fs'
 import path from 'path'
 import yaml from 'js-yaml'
 import { stdout } from 'process'
+import { checkServerIdentity } from 'tls'
 
 const rootDir = path.resolve(process.cwd(), '..', '..')
 
@@ -202,21 +203,13 @@ export class ApiController {
         await databaseService.updateVideoStatus(videoId, progress)
       })
       const [titleEn, descriptionEn] = await Promise.all([
-        translator.translate({
-          text: titleToTranslate,
-          targetLanguage: 'en',
-          sourceLanguage: 'zh'
-        }),
-        descriptionToTranslate ? translator.translate({
-          text: descriptionToTranslate,
-          targetLanguage: 'en',
-          sourceLanguage: 'zh'
-        }) : null
+        translator.translate({ text: titleToTranslate }),
+        descriptionToTranslate ? translator.translate({ text: descriptionToTranslate }) : null
       ])
-      logger.info(`翻译完成: ${titleEn.text}, ${descriptionEn?.text}`)
+      logger.info(`翻译完成: ${titleEn}, ${descriptionEn}`)
       // 更新视频数据
       const updatedVideo: Partial<VideoMeta> = {
-        titleEn: titleEn.text,
+        titleEn: titleEn?.text,
         descriptionEn: descriptionEn?.text,
         status: {
           stage: 'idle',
@@ -448,14 +441,18 @@ export class ApiController {
         logger.warn('抖音服务状态异常:', response.data)
         await this.initDouyinServer()
       }
-    } catch (error) {
-      logger.error('无法连接到抖音服务:', error)
+    } catch (error: any) {
+      logger.error('无法连接到抖音服务:', error?.message)
     }
   }
 
   // 启动抖音服务  bash scripts/start-douyin-api.sh
   async startDouyinServer() {
     try {
+      const res = await this.checkHasDouyinServer()
+      if (res) {
+        return
+      }
       const { spawn, execSync } = require('child_process')
       const scriptPath = path.resolve(rootDir, 'scripts/start-douyin-api.sh')
 
@@ -468,15 +465,17 @@ export class ApiController {
       const child = spawn('bash', [scriptPath], {
         cwd: rootDir,
         shell: process.env.SHELL,
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true
       })
+      child.unref()
       child.stdout?.on('data', (data: any) => {
         logger.info(`抖音服务输出: ${data.toString().trim()}`)
       })
       child.stderr?.on('data', (data: any) => {
-        logger.error(`抖音服务错误: ${data.toString().trim()}`)
+        logger.info(`抖音服务输出: ${data.toString().trim()}`)
       })
-
+      child.unre
       // 等待服务启动
       let attempts = 0
       const maxAttempts = 10
@@ -485,7 +484,7 @@ export class ApiController {
         try {
           await new Promise(resolve => setTimeout(resolve, 2000))
           const response = await axios.get(process.env.DOUYIN_API_URL + '/docs', { timeout: 5000 })
-
+          console.log()
           if (response.status === 200) {
             logger.info('抖音服务已成功启动')
             return true

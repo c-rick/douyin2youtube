@@ -19,6 +19,7 @@ export interface VideoMeta {
   localPath?: string
   youtubeId?: string
   tags?: string[]
+  remotePath?: string
 }
 
 export interface ProcessingStatus {

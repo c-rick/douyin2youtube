@@ -65,10 +65,7 @@ DEEPL_API_KEY=your_deepl_api_key
 ### 启动服务
 
 ```bash
-# 启动抖音 API 服务
-pnpm run start-douyin-api
-
-# 启动前端 + 后端
+# 启动前端 + 后端 + 自动启动抖音服务获取cookie
 pnpm dev
 ```
 

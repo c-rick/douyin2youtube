@@ -21,21 +21,40 @@ export class YouTubeUploader {
       process.env.YOUTUBE_CLIENT_SECRET,
       process.env.YOUTUBE_REDIRECT_URL
     )
+
+    this.initYouTube()
+  }
+
+  async initYouTube() {
     const scopes = [
       'https://www.googleapis.com/auth/youtube.upload',
       'https://www.googleapis.com/auth/youtube.readonly'
     ]
-    this.authUrl = this.oauth2Client.generateAuthUrl({
-      access_type: 'offline', // 关键：要获取 refresh_token 必须用 offline
-      scope: scopes,
-      prompt: 'consent'
-    })
-
-    const token = loadToken();
-    if (token) {
-      this.oauth2Client.setCredentials(token)
-      this.oauth2Client.refreshAccessToken()
-      this.isAuth = true
+    try {
+      this.authUrl = this.oauth2Client.generateAuthUrl({
+        access_type: 'offline', // 关键：要获取 refresh_token 必须用 offline
+        scope: scopes,
+        prompt: 'consent'
+      })
+      logger.info('init YouTube server')
+      const token = loadToken();
+      if (token) {
+        const res = await this.validateToken()
+        if (!res) {
+          throw Error('youtube token 失效')
+        }
+        this.oauth2Client.setCredentials(token)
+        this.oauth2Client.refreshAccessToken()
+        this.isAuth = true
+      }
+    } catch (err) {
+      logger.error('youtube token 更新失败')
+      this.deleteToken()
+      this.authUrl = this.oauth2Client.generateAuthUrl({
+        access_type: 'offline', // 关键：要获取 refresh_token 必须用 offline
+        scope: scopes,
+        prompt: 'consent'
+      })
     }
   }
 
@@ -133,11 +152,23 @@ export class YouTubeUploader {
         mine: true
       })
       return true
-    } catch (error) {
-      logger.error('YouTube token验证失败:', error)
-      return false
+    } catch (error: any) {
+      logger.error('YouTube token验证失败:')
+    }
+    return false
+  }
+
+  // 删除youtubetoken
+  deleteToken() {
+    try {
+      saveToken(null)
+      this.isAuth = false
+      logger.info('YouTube token 已删除')
+    } catch (err) {
+      logger.error('删除 YouTube token 失败', err)
     }
   }
+
 }
 let uploader: YouTubeUploader | null = null
 export const getYouTubeUploader = () => {

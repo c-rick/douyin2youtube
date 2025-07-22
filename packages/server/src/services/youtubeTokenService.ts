@@ -5,8 +5,8 @@ const tokenPath = path.resolve(__dirname, '../data/youtube_token.json');
 
 import { Credentials } from 'google-auth-library';
 
-export function saveToken(token: Credentials) {
-  if (!fs.existsSync(tokenPath)) {
+export function saveToken(token: Credentials | null) {
+  if (!fs.existsSync(tokenPath) || !token) {
     fs.writeFileSync(tokenPath, JSON.stringify({}, null, 2), 'utf-8')
   }
   fs.writeFileSync(tokenPath, JSON.stringify(token, null, 2), 'utf-8');

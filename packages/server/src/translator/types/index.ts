@@ -1,7 +1,7 @@
 export interface TranslationOptions {
   text: string;
   sourceLanguage?: string;
-  targetLanguage: string;
+  targetLanguage?: string;
   segments?: TranslationSegment[];
   provider?: 'openai' | 'deepl';
   temperature?: number;
