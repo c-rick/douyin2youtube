@@ -315,13 +315,20 @@ export default function EditorPage() {
               {/* 视频预览 */}
               {currentVideo.remotePath ?
                 <div className="mb-6">
-                  <video className="w-full  max-w-md h-auto rounded-lg" controls  >
+                  <video
+                    key={currentVideo.id} // 添加 key 强制重新渲染
+                    className="w-full max-w-md h-auto rounded-lg"
+                    controls
+                    preload="metadata"
+                  >
                     <source src={currentVideo.remotePath} type="video/mp4" />
+                    您的浏览器不支持视频播放。
                   </video>
                 </div>
                 : currentVideo.coverUrl && (
                   <div className="mb-6">
                     <img
+                      key={currentVideo.id} // 添加 key 确保图片也能正确更新
                       src={currentVideo.coverUrl}
                       alt={currentVideo.title}
                       className="w-full max-w-md h-auto rounded-lg"

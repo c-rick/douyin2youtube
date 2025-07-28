@@ -204,7 +204,8 @@ export class Translator {
     text: string,
     sourceLanguage: string,
     targetLanguage: string,
-    customPrompt?: string
+    customPrompt?: string,
+    limit: number = 80
   ): Promise<string> {
     if (!this.openai) {
       throw new TranslatorError('OpenAI客户端未初始化，请检查API密钥配置');
@@ -221,14 +222,14 @@ export class Translator {
     const targetLangName = languageNames[targetLanguage] || targetLanguage;
 
     const prompt = customPrompt ||
-      `请将以下${sourceLangName}文本翻译成${targetLangName}，保持原文的语气和风格，确保翻译自然流畅， 请直接输出翻译结果，无需说明或解释, 需要保持翻译的结果为80个字符内，包含标点符号，如果超过80个字符，请进行总结概括：\n\n原文：${text}\n\n翻译：`;
+      `请将以下${sourceLangName}文本翻译成${targetLangName}，保持原文的语气和风格，确保翻译自然流畅， 请直接输出翻译结果，无需说明或解释,  需要保持翻译的结果为${limit}个字符内，包含标点符号，如果超过${limit}个字符，请进行总结概括：\n\n原文：${text}\n\n翻译：`;
 
     const response = await this.openai.chat.completions.create({
       model: this.model,
       messages: [
         {
           role: 'system',
-          content: '你是一个专业的翻译助手。你的任务是接收一段用户提供的原文内容，然后将其准确地翻译为目标语言。你必须直接返回翻译后的内容，不要多说任何无关内容，不要解释你的翻译过程'
+          content: '你是一个专业的翻译助手。你的任务是接收一段用户提供的原文内容，然后将其准确地翻译为目标语言。首先对原文内容进行总结，然后必须直接返回翻译后的内容，不要多说任何无关内容，不要解释你的翻译过程'
         },
         {
           role: 'user',

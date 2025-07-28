@@ -30,31 +30,55 @@ export class YouTubeUploader {
       'https://www.googleapis.com/auth/youtube.upload',
       'https://www.googleapis.com/auth/youtube.readonly'
     ]
+
+    this.authUrl = this.oauth2Client.generateAuthUrl({
+      access_type: 'offline', // 关键：要获取 refresh_token 必须用 offline
+      scope: scopes,
+      prompt: 'consent'
+    })
+
     try {
-      this.authUrl = this.oauth2Client.generateAuthUrl({
-        access_type: 'offline', // 关键：要获取 refresh_token 必须用 offline
-        scope: scopes,
-        prompt: 'consent'
-      })
       logger.info('init YouTube server')
       const token = loadToken();
       if (token) {
-        const res = await this.validateToken()
-        if (!res) {
-          throw Error('youtube token 失效')
-        }
         this.oauth2Client.setCredentials(token)
-        this.oauth2Client.refreshAccessToken()
-        this.isAuth = true
+
+        // 设置自动刷新 token 的回调
+        this.oauth2Client.on('tokens', (tokens) => {
+          logger.info('YouTube token 自动刷新成功')
+          if (tokens.refresh_token) {
+            // 如果有新的 refresh_token，保存它
+            const currentTokens = this.oauth2Client.credentials
+            const updatedTokens = {
+              ...currentTokens,
+              ...tokens
+            }
+            saveToken(updatedTokens)
+          } else {
+            // 只更新 access_token
+            const currentTokens = this.oauth2Client.credentials
+            const updatedTokens = {
+              ...currentTokens,
+              access_token: tokens.access_token,
+              expiry_date: tokens.expiry_date
+            }
+            saveToken(updatedTokens)
+          }
+        })
+
+        // 验证 token 是否有效，如果无效会自动尝试刷新
+        const isValid = await this.validateAndRefreshToken()
+        if (isValid) {
+          this.isAuth = true
+          logger.info('YouTube token 验证成功')
+        } else {
+          throw new Error('Token 验证失败且无法刷新')
+        }
       }
     } catch (err) {
-      logger.error('youtube token 更新失败')
+      logger.error('YouTube token 初始化失败:', err)
       this.deleteToken()
-      this.authUrl = this.oauth2Client.generateAuthUrl({
-        access_type: 'offline', // 关键：要获取 refresh_token 必须用 offline
-        scope: scopes,
-        prompt: 'consent'
-      })
+      this.isAuth = false
     }
   }
 
@@ -75,6 +99,22 @@ export class YouTubeUploader {
   ): Promise<string> {
     try {
       logger.info(`开始上传视频到YouTube: ${JSON.stringify(metadata)}`)
+
+      // 检查标题长度
+      if (metadata.title && metadata.title.length > 80) {
+        const errorMessage = `标题长度超过限制: ${metadata.title.length}/80 字符。请缩短标题后重试。`
+        logger.warn(errorMessage)
+        this.updateProgress(metadata.videoId, 'error', 0, '标题过长', errorMessage)
+        throw new Error(errorMessage)
+      }
+
+      // 在上传前确保 token 有效
+      const tokenValid = await this.validateAndRefreshToken()
+      if (!tokenValid) {
+        const errorMessage = 'YouTube token 无效且无法刷新，请重新授权'
+        this.updateProgress(metadata.videoId, 'error', 0, 'Token 无效', errorMessage)
+        throw new Error(errorMessage)
+      }
 
       this.updateProgress(metadata.videoId, 'uploading', 90, '开始上传到YouTube...')
 
@@ -153,9 +193,47 @@ export class YouTubeUploader {
       })
       return true
     } catch (error: any) {
-      logger.error('YouTube token验证失败:')
+      logger.error('YouTube token验证失败:', error)
     }
     return false
+  }
+
+  // 验证并刷新 token
+  async validateAndRefreshToken(): Promise<boolean> {
+    try {
+      // 首先尝试验证当前 token
+      const isValid = await this.validateToken()
+      if (isValid) {
+        return true
+      }
+
+      // 如果验证失败，尝试刷新 token
+      logger.info('Token 验证失败，尝试刷新...')
+      const credentials = this.oauth2Client.credentials
+
+      if (!credentials.refresh_token) {
+        logger.error('没有 refresh_token，无法自动刷新')
+        return false
+      }
+
+      // 刷新 access token
+      const { credentials: newCredentials } = await this.oauth2Client.refreshAccessToken()
+      logger.info('Token 刷新成功')
+
+      // 保存新的 token
+      const updatedTokens = {
+        ...credentials,
+        ...newCredentials
+      }
+      saveToken(updatedTokens)
+
+      // 再次验证
+      return await this.validateToken()
+
+    } catch (error) {
+      logger.error('Token 刷新失败:', error)
+      return false
+    }
   }
 
   // 删除youtubetoken
